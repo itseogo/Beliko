@@ -23,7 +23,10 @@
   {% for o in optionen %}
   <label class="check"><input type="checkbox" name="{{ o.key }}" value="1" {{ 'checked' if o.an }} {{ 'disabled' if not o.umgesetzt }}> {{ o.titel }}{% if not o.umgesetzt %} <span class="chip">folgt später</span>{% endif %}</label>
   {% endfor %}
-  <label class="f" style="max-width:24rem"><span>Wann?</span><select name="lex_intervall" disabled><option>Nur auf Knopfdruck</option></select><small>Ein automatischer Abgleich (z. B. nachts) folgt später.</small></label>
+  <div class="grid2" style="margin-top:.75rem">
+    <label class="f"><span>Belege abrufen ab Datum (optional)</span><input type="date" name="lex_belege_ab" value="{{ belege_ab }}"><small>Belege vor diesem Datum werden beim Abgleich ignoriert (z. B. 01.01.2026). Leer lassen, um alle Belege zu laden.</small></label>
+    <label class="f"><span>Wann?</span><select name="lex_intervall" disabled><option>Nur auf Knopfdruck</option></select><small>Ein automatischer Abgleich (z. B. nachts) folgt später.</small></label>
+  </div>
   <button class="btn">Speichern</button>
 </form>
 

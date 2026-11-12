@@ -217,18 +217,22 @@ def artikel_schluessel(lex_artikel_id, bezeichnung):
     return f"name:{name}"[:300] if name else None
 
 
-def alle_belege(basis, schluessel, typen):
-    """Lädt die Belegliste (/v1/voucherlist) für die gewünschten Typen (seitenweise)."""
+def alle_belege(basis, schluessel, typen, datum_ab=None):
+    """Lädt die Belegliste (/v1/voucherlist) für die gewünschten Typen (seitenweise), optional ab einem Datum."""
     if not typen:
         return []
     erg, seite = [], 0
+    params = {
+        "voucherType": ",".join(typen),
+        "voucherStatus": BELEG_STATUS_FILTER,
+        "page": seite,
+        "size": SEITENGROESSE,
+    }
+    if datum_ab:
+        params["voucherDateFrom"] = str(datum_ab)[:10]
     while True:
-        d = anfrage(basis, schluessel, "/voucherlist", {
-            "voucherType": ",".join(typen),
-            "voucherStatus": BELEG_STATUS_FILTER,
-            "page": seite,
-            "size": SEITENGROESSE,
-        })
+        params["page"] = seite
+        d = anfrage(basis, schluessel, "/voucherlist", params)
         erg.extend(d.get("content") or [])
         if d.get("last", True) or seite + 1 >= (d.get("totalPages") or 1):
             return erg
@@ -331,7 +335,7 @@ def _beleg_uebernehmen(doc, kopf, detail, kontakte_by_lex, regeln):
         ))
 
 
-def belege_synchronisieren(session, basis, schluessel, angebote=False, auftraege=False, rechnungen=False):
+def belege_synchronisieren(session, basis, schluessel, angebote=False, auftraege=False, rechnungen=False, datum_ab=None):
     """Gleicht Angebote, Aufträge und Rechnungen einseitig ab (Lexoffice → App)."""
     typen = []
     if angebote:
@@ -344,7 +348,7 @@ def belege_synchronisieren(session, basis, schluessel, angebote=False, auftraege
     if not typen:
         return erg
 
-    liste = alle_belege(basis, schluessel, typen)
+    liste = alle_belege(basis, schluessel, typen, datum_ab=datum_ab)
     erg["gesamt"] = len(liste)
     bestehende = {d.lexoffice_id: d for d in session.query(LexDocument).all()}
     kontakte_by_lex = {c.lexoffice_id: c.id for c in session.query(Contact).filter(Contact.lexoffice_id.isnot(None)).all()}

@@ -1719,6 +1719,8 @@ def lexoffice_seite():
             for schluessel, _titel, umgesetzt, _std in LEX_OPTIONEN:
                 if umgesetzt:
                     einstellungen.schreiben(g.db, schluessel, "1" if request.form.get(schluessel) == "1" else "0")
+            ab = (request.form.get("lex_belege_ab") or "").strip()
+            einstellungen.schreiben(g.db, "lex_belege_ab", ab if re.match(r"^\d{4}-\d{2}-\d{2}$", ab) else "")
             g.db.commit()
             flash("Lexoffice-Einstellungen gespeichert.", "ok")
             return redirect(url_for("main.lexoffice"))
@@ -1734,6 +1736,7 @@ def lexoffice_seite():
         "lexoffice.html", fehler=fehler, aktiv=einstellungen.an(g.db, "lex_aktiv"),
         url=einstellungen.lesen(g.db, "lex_url", lexoffice.BASIS), hat_key=bool(einstellungen.lesen(g.db, "lex_key_enc")),
         optionen=optionen, letzter=letzter,
+        belege_ab=einstellungen.lesen(g.db, "lex_belege_ab", ""),
         anzahl=g.db.query(Contact).filter(Contact.quelle == "lexoffice").count(),
         belege_anz=belege_anz)
 
@@ -1771,8 +1774,9 @@ def lexoffice_abgleichen():
         rech = einstellungen.an(g.db, "lex_sync_rechnungen", False)
         belege_erg = None
         if ang or auf or rech:
+            ab_datum = einstellungen.lesen(g.db, "lex_belege_ab", "")
             belege_erg = lexoffice.belege_synchronisieren(
-                g.db, basis, key, angebote=ang, auftraege=auf, rechnungen=rech)
+                g.db, basis, key, angebote=ang, auftraege=auf, rechnungen=rech, datum_ab=(ab_datum or None))
         einstellungen.schreiben(g.db, "lex_letzter_sync", json.dumps({
             "zeit": jetzt, "ergebnis": erg, "belege": belege_erg, "fehler": None}))
         g.db.commit()
