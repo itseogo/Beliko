@@ -215,13 +215,14 @@ with db() as s:
     assert len(docs) == 3
     ang = docs["doc-ang-1"]
     assert (ang.typ, ang.nummer, ang.netto, ang.contact_id) == ("angebot", "AG-2026-001", Decimal("2000.00"), 1)
-    assert ang.unklar_anzahl == 3 and ang.materialwert == Decimal("0.00")        # Textzeile ist nicht unklar; Rest noch unklar!
+    # NYM-J 3x1,5 ist material (1000 €), Montagearbeiten ist service (Arbeit, 0 €), Kernbohrung ist custom (unklar!)
+    assert ang.unklar_anzahl == 1 and ang.materialwert == Decimal("1000.00")
     ang_id = ang.id
     item_ids = {i.bezeichnung: i.id for i in ang.items if i.lex_typ != "text"}
 
 # Belegliste & Detailseite
-assert "AG-2026-001" in G("/lexoffice/belege") and "3 unklar" in G("/lexoffice/belege")
-assert "3 Position(en) haben noch keine Kostenart" in G(f"/lexoffice/belege/{ang_id}")
+assert "AG-2026-001" in G("/lexoffice/belege") and "1 unklar" in G("/lexoffice/belege")
+assert "1 Position(en) haben noch keine Kostenart" in G(f"/lexoffice/belege/{ang_id}")
 
 # Kostenarten setzen + mit Projekt P1 verknüpfen + Artikelregel merken
 P(f"/lexoffice/belege/{ang_id}", {

@@ -318,6 +318,12 @@ def _beleg_uebernehmen(doc, kopf, detail, kontakte_by_lex, regeln):
                 ka, anteil = alt_by_pos[(idx, bez)]
             elif k and k in regeln:
                 ka, anteil = regeln[k].kostenart, regeln[k].materialanteil
+            elif lex_typ == "service":
+                # Service in Lexoffice ist Arbeitszeit/Dienstleistung -> automatisch Arbeit (0 % Material)
+                ka, anteil = "arbeit", Decimal("0.00")
+            elif lex_typ == "material":
+                # Produkt/Material in Lexoffice -> automatisch Material (100 %)
+                ka, anteil = "material", Decimal("100.00")
 
         doc.items.append(LexDocumentItem(
             position=idx,
