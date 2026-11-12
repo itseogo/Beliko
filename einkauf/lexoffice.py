@@ -20,16 +20,22 @@ _schlafen = time.sleep
 
 
 class LexFehler(Exception):
-    pass
+    def __init__(self, meldung, status_code=None, antwort_daten=None):
+        super().__init__(meldung)
+        self.status_code = status_code
+        self.antwort_daten = antwort_daten
 
 
-def _fehlertext(code):
+def _fehlertext(code, details=None):
+    if code == 400:
+        d_text = f" ({details})" if details else ""
+        return f"Lexoffice hat die Anfrage als ungültig abgewiesen (HTTP 400){d_text}. Bitte Parameter oder Belegfilter prüfen."
     return {
         401: "Der API-Schlüssel wurde abgelehnt (ungültig, abgelaufen oder für eine andere Firma erzeugt).",
         403: "Dem API-Schlüssel fehlt die Berechtigung (oder der Lexoffice-Tarif enthält die öffentliche API nicht).",
         404: "Die Adresse wurde nicht gefunden. Stimmt die API-Adresse?",
         429: "Lexoffice meldet zu viele Anfragen. Bitte in einer Minute erneut versuchen.",
-    }.get(code, f"Lexoffice hat mit einem Fehler geantwortet (HTTP {code}).")
+    }.get(code, f"Lexoffice hat mit einem Fehler geantwortet (HTTP {code})." + (f" ({details})" if details else ""))
 
 
 def anfrage(basis, schluessel, pfad, params=None, timeout=20):
@@ -44,12 +50,19 @@ def anfrage(basis, schluessel, pfad, params=None, timeout=20):
             if e.code == 429 and versuch < 3:
                 _schlafen(1.2 * (versuch + 1))
                 continue
-            raise LexFehler(_fehlertext(e.code))
+            err_body = None
+            try:
+                raw = e.read().decode("utf-8", errors="replace")
+                parsed = json.loads(raw)
+                err_body = parsed.get("message") or parsed.get("error") or raw
+            except Exception:
+                pass
+            raise LexFehler(_fehlertext(e.code, err_body), status_code=e.code, antwort_daten=err_body)
         except ValueError:
             raise LexFehler("Unerwartete Antwort von Lexoffice (kein JSON). Stimmt die API-Adresse?")
         except OSError as e:
             raise LexFehler(f"Keine Verbindung zu Lexoffice: {e}")
-    raise LexFehler(_fehlertext(429))
+    raise LexFehler(_fehlertext(429), status_code=429)
 
 
 def profil(basis, schluessel):
@@ -175,7 +188,7 @@ BELEG_PFADE = {
     "invoice": ("rechnung", "/invoices/"),
     "salesinvoice": ("rechnung", "/invoices/"),
 }
-BELEG_STATUS_FILTER = "draft,open,paid,paidoff,voided,overdue,accepted,rejected"
+BELEG_STATUS_FILTER = "any"
 
 
 def _dec(wert):
