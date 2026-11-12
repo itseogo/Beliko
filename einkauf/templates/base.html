@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="de" data-theme="{{ theme }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{% endblock %} – BeLiKo</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+{% set ep = request.endpoint or '' %}
+{% set ast = request.args.get('status') %}
+{% set ajahr = (request.args.get('jahr') or 0)|int %}
+{% set amonat = (request.args.get('monat') or 0)|int %}
+<div class="{{ 'app' if g.user else '' }}">
+{% if g.user and baum_best is defined %}
+<aside class="tree">
+  <nav aria-label="Navigation">
+    <a class="t-item top-l {{ 'on' if ep == 'main.dashboard' }}" href="{{ url_for('main.dashboard') }}">Übersicht</a>
+
+    <details class="t-grp" {{ 'open' if ep.startswith('main.projekt') or ep.startswith('main.lex_beleg') }}>
+      <summary><a href="{{ url_for('main.projekte') }}">Projekte</a></summary>
+      {% for key, label in [('aktiv', 'Aktiv'), ('planung', 'Planung'), ('abgeschlossen', 'Abgeschlossen')] %}
+      {% set liste = baum_proj|selectattr('status', 'equalto', key)|list %}
+      <details class="t-sub" {{ 'open' if key == 'aktiv' and ep.startswith('main.projekt') }}>
+        <summary>{{ label }} <span class="n">{{ liste|length }}</span></summary>
+        {% for p in liste %}<a class="t-item leaf" href="{{ url_for('main.projekte', p=p.id, status='alle') }}" title="{{ p.name }}">{{ p.nummer }} · {{ p.name }}</a>{% endfor %}
+      </details>
+      {% endfor %}
+      <a class="t-item {{ 'on' if ep.startswith('main.lex_beleg') }}" href="{{ url_for('main.lex_belege') }}">Lexoffice-Belege</a>
+    </details>
+
+    <details class="t-grp" open>
+      <summary>Bestellwesen</summary>
+      <a class="t-item {{ 'on' if ep == 'main.rueckstand' }}" href="{{ url_for('main.rueckstand') }}">Rückstand{% if rueckstand_anz %} <span class="n">{{ rueckstand_anz }}</span>{% endif %}</a>
+      <a class="t-item {{ 'on' if ep.startswith('main.lieferschein') }}" href="{{ url_for('main.lieferscheine') }}">Lieferscheine</a>
+      <a class="t-item {{ 'on' if ep.startswith('main.datei') }}" href="{{ url_for('main.dateien') }}">Lieferantendateien{% if dateien_neu %} <span class="n">{{ dateien_neu }}</span>{% endif %}</a>
+      <a class="t-item {{ 'on' if ep.startswith('main.artikel') }}" href="{{ url_for('main.artikel') }}">Artikelstamm</a>
+      <a class="t-item {{ 'on' if ep.startswith('main.rechnungen') }}" href="{{ url_for('main.rechnungen') }}">Rechnungen</a>
+      <details class="t-sub" open>
+        <summary><a href="{{ url_for('main.bestellungen') }}" class="{{ 'on' if ep == 'main.bestellungen' and not ast }}">Bestellungen</a></summary>
+        {% for key in ['neu', 'bestellt', 'teilgeliefert', 'komplett', 'abgeschlossen'] %}
+        {% set b = baum_best[key] %}
+        <details class="t-sub2" {{ 'open' if ep == 'main.bestellungen' and ast == key }}>
+          <summary><a href="{{ url_for('main.bestellungen', status=key) }}" class="{{ 'on' if ep == 'main.bestellungen' and ast == key and not ajahr }}">{{ BEST_KURZ[key] }}</a> <span class="n">{{ b.n }}</span></summary>
+          {% for jahr, n, monate in b.jahre %}
+          <details class="t-sub3" {{ 'open' if ep == 'main.bestellungen' and ast == key and ajahr == jahr }}>
+            <summary><a href="{{ url_for('main.bestellungen', status=key, jahr=jahr) }}">{{ jahr }}</a> <span class="n">{{ n }}</span></summary>
+            {% for monat, mn in monate %}<a class="t-item leaf {{ 'on' if ast == key and ajahr == jahr and amonat == monat }}" href="{{ url_for('main.bestellungen', status=key, jahr=jahr, monat=monat) }}">{{ '%02d'|format(monat) }} {{ MONATE[monat] }} <span class="n">{{ mn }}</span></a>{% endfor %}
+          </details>
+          {% endfor %}
+        </details>
+        {% endfor %}
+      </details>
+    </details>
+
+    <details class="t-grp" {{ 'open' if ep.startswith('main.kontakt') }}>
+      <summary><a href="{{ url_for('main.kontakte') }}">Kontakte</a></summary>
+      {% set rolle_a = request.args.get('rolle', 'alle') %}
+      <a class="t-item {{ 'on' if ep == 'main.kontakte' and rolle_a == 'alle' }}" href="{{ url_for('main.kontakte') }}">Alle <span class="n">{{ kontakt_anz.alle }}</span></a>
+      <a class="t-item {{ 'on' if ep == 'main.kontakte' and rolle_a == 'kunden' }}" href="{{ url_for('main.kontakte', rolle='kunden') }}">Kunden <span class="n">{{ kontakt_anz.kunden }}</span></a>
+      <a class="t-item {{ 'on' if ep == 'main.kontakte' and rolle_a == 'lieferanten' }}" href="{{ url_for('main.kontakte', rolle='lieferanten') }}">Lieferanten <span class="n">{{ kontakt_anz.lieferanten }}</span></a>
+    </details>
+
+    {% if g.user.role == 'admin' %}
+    <details class="t-grp" {{ 'open' if ep.startswith('main.lieferant') or ep.startswith('main.benutzer') or ep.startswith('main.einstellungen') or ep == 'main.nummernkreise' or ep.startswith('main.lexoffice') }}>
+      <summary>Einstellungen</summary>
+      <a class="t-item {{ 'on' if ep.startswith('main.lieferant') }}" href="{{ url_for('main.lieferanten') }}">Lieferanten</a>
+      <a class="t-item {{ 'on' if ep.startswith('main.benutzer') }}" href="{{ url_for('main.benutzer') }}">Benutzer</a>
+      <a class="t-item {{ 'on' if ep == 'main.nummernkreise' }}" href="{{ url_for('main.nummernkreise') }}">Nummernkreise</a>
+      <a class="t-item {{ 'on' if ep.startswith('main.lexoffice') }}" href="{{ url_for('main.lexoffice') }}">Lexoffice</a>
+      <a class="t-item {{ 'on' if ep == 'main.einstellungen_protokoll' }}" href="{{ url_for('main.einstellungen_protokoll') }}">Protokoll &amp; Sperren</a>
+      <a class="t-item {{ 'on' if ep.startswith('main.einstellungen_sicherung') }}" href="{{ url_for('main.einstellungen_sicherung') }}">Datensicherung</a>
+    </details>
+    {% endif %}
+  </nav>
+</aside>
+{% endif %}
+<div class="inhalt">
+{% if g.user %}
+<header class="top">
+  <a class="brand" href="{{ url_for('main.dashboard') }}" title="BestellLieferKontrolle">BeLiKo</a>{% if firma %}<span class="firma">{{ firma }}</span>{% endif %}
+  {% if g.user.role != 'leser' %}
+  <details class="neu-menu" id="neu-menu">
+    <summary class="btn neu-knopf" aria-haspopup="true">Neu <span aria-hidden="true">▾</span></summary>
+    <ul class="neu-liste" role="menu">
+      <li role="none"><a role="menuitem" href="{{ url_for('main.bestellung_neu') }}">Bestellung</a></li>
+      <li role="none"><a role="menuitem" href="{{ url_for('main.lieferschein_neu') }}">Lieferschein</a></li>
+      <li role="none"><a role="menuitem" href="{{ url_for('main.ids_seite') }}">Aus IDS übernehmen</a></li>
+      <li role="none"><a role="menuitem" href="{{ url_for('main.projekt_neu') }}">Projekt anlegen</a></li>
+      <li role="none"><a role="menuitem" href="{{ url_for('main.kontakt_neu') }}">Kontakt anlegen</a></li>
+    </ul>
+  </details>
+  {% endif %}
+  <div class="user">
+    <a href="{{ url_for('main.konto') }}">{{ g.user.username }}</a>
+    <form method="post" action="{{ url_for('main.logout') }}">{% from '_m.html' import csrf with context %}{{ csrf() }}<button class="link">Abmelden</button></form>
+  </div>
+</header>
+{% endif %}
+<main>
+{% for cat, msg in get_flashed_messages(with_categories=true) %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+{% block content %}{% endblock %}
+</main>
+</div>
+</div>
+<script>
+(function () {
+  var m = document.getElementById('neu-menu'); if (!m) return;
+  document.addEventListener('click', function (e) { if (m.open && !m.contains(e.target)) m.open = false; });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && m.open) { m.open = false; m.querySelector('summary').focus(); } });
+})();
+</script>
+</body>
+</html>

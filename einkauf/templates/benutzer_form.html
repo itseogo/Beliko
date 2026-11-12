@@ -1,0 +1,14 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf, field, auswahl with context %}{% block title %}Benutzer{% endblock %}
+{% block content %}
+<form method="post" class="panel narrow">
+  <h1>{{ 'Benutzer anlegen' if neu else u.username }}</h1>
+  {% if fehler %}<div class="flash fehler">{{ fehler }}</div>{% endif %}
+  {{ csrf() }}
+  {% if neu %}{{ field('Benutzername', 'username', u.username, required=True, autofocus=True) }}{% endif %}
+  {{ auswahl('Rolle', 'role', rollen.items()|list, u.role) }}
+  {{ field('Passwort' if neu else 'Neues Passwort (leer lassen = unverändert)', 'password', '', type='password', required=neu, hint='Mindestens 8 Zeichen') }}
+  {% if not neu %}<label class="check"><input type="checkbox" name="active" value="1" {{ 'checked' if u.active }}> Benutzer ist aktiv</label>{% endif %}
+  <p class="meta">Admin darf alles. Einkäufer erfasst Bestellungen, Projekte und Wareneingänge. „Nur lesen“ sieht alles, ändert nichts.</p>
+  <div class="actions"><button class="btn">Speichern</button><a class="btn sek" href="{{ url_for('main.benutzer') }}">Abbrechen</a></div>
+</form>
+{% endblock %}

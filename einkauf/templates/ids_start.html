@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="de" data-theme="{{ theme }}">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shop wird geöffnet</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head>
+<body>
+<main>
+<div class="panel narrow">
+  <h1>{{ s.name }}</h1>
+  <p id="info">Der Shop wird geöffnet und du wirst automatisch angemeldet …</p>
+  <form id="shop" method="post" action="{{ s.ids_url }}" enctype="multipart/form-data" accept-charset="utf-8">
+    {% for name, wert in felder %}<input type="hidden" name="{{ name }}" value="{{ wert }}">{% endfor %}
+    <noscript><p>Ohne JavaScript bitte hier klicken:</p></noscript>
+    <button class="btn" id="weiter">Weiter zum Shop</button>
+  </form>
+  <p class="meta">Falls nichts passiert: Auf „Weiter zum Shop“ klicken.</p>
+</div>
+</main>
+<script>document.getElementById('shop').submit();</script>
+</body>
+</html>

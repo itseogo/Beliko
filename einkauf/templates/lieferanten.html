@@ -1,0 +1,14 @@
+{% extends 'base.html' %}{% block title %}Lieferanten{% endblock %}
+{% block content %}
+<div class="kopf"><h1>Einstellungen</h1><a class="btn" href="{{ url_for('main.lieferant_neu') }}">Lieferant anlegen</a></div>
+<div class="tabs"><a class="on" href="{{ url_for('main.lieferanten') }}">Lieferanten</a><a href="{{ url_for('main.benutzer') }}">Benutzer</a><a href="{{ url_for('main.nummernkreise') }}">Nummernkreise</a><a href="{{ url_for('main.lexoffice') }}">Lexoffice</a></div>
+{% if liste %}
+<div class="scroll"><table>
+<thead><tr><th>Name</th><th>Kundennr.</th><th>Ansprechpartner</th><th>Telefon</th><th>UGL-Schnittstelle</th><th>Status</th></tr></thead>
+<tbody>{% for s in liste %}<tr class="{{ 'storno' if not s.active }}">
+<td><a href="{{ url_for('main.lieferant_bearbeiten', sid=s.id) }}">{{ s.name }}</a></td>
+<td>{{ s.kundennr or '' }}</td><td>{{ s.ansprechpartner or '' }}</td><td>{{ s.telefon or '' }}</td>
+<td>{{ (s.ugl_verfahren|upper ~ (' · ' ~ s.ugl_format if s.ugl_format else '')) if s.ugl_verfahren else 'nicht eingerichtet' }}</td>
+<td>{{ 'Aktiv' if s.active else 'Deaktiviert' }}</td></tr>{% endfor %}</tbody></table></div>
+{% else %}<p class="leer">Noch keine Lieferanten. Lege den ersten an, damit du Bestellungen erfassen kannst.</p>{% endif %}
+{% endblock %}

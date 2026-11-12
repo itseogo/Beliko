@@ -1,0 +1,23 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf, field, area, auswahl with context %}{% block title %}{{ 'Projekt anlegen' if neu else 'Projekt bearbeiten' }}{% endblock %}
+{% block content %}
+<form method="post" class="panel">
+  <h1>{{ 'Projekt anlegen' if neu else 'Projekt bearbeiten' }}</h1>
+  {% if fehler %}<div class="flash fehler">{{ fehler }}</div>{% endif %}
+  {{ csrf() }}
+  <input type="hidden" name="version" value="{{ p.version or 1 }}">
+  <div class="grid2">
+  {{ field('Projektnummer', 'nummer', p.nummer or request.form.get('nummer',''), required=True, autofocus=neu, hint='Vorschlag aus dem Nummernkreis, zum Ändern einfach überschreiben.' if neu else '') }}
+  {{ field('Projektname', 'name', p.name, required=True) }}
+  <label class="f"><span>Kunde</span>
+    <input name="kunde" value="{{ p.kunde or '' }}" list="kunden-liste" autocomplete="off" placeholder="aus den Kontakten wählen oder eintippen">
+    <datalist id="kunden-liste">{% for k in kunden %}<option value="{{ k.name }}" label="{{ k.nummern }}{{ ' · ' ~ k.ort if k.ort }}"></option>{% endfor %}</datalist>
+    <small>Beim Eintippen erscheinen passende Kontakte. Gibt es den Kunden dort nicht, schreib den Namen einfach selbst hin. {% if g.user.role != 'leser' %}<a href="{{ url_for('main.kontakt_neu') }}" target="_blank">Kontakt anlegen</a>{% endif %}</small></label>
+  {{ auswahl('Status', 'status', status.items()|list, p.status) }}
+  {{ auswahl('Materialbudget-Berechnung', 'budget_modus', budget_modi.items()|list, p.budget_modus or 'manuell') }}
+  {{ field('Materialbudget manuell (netto, optional)', 'materialbudget', p.materialbudget|moneyinp, mode='decimal', hint='Gilt beim Modus „Manuell“. Leer lassen, wenn es kein Budget gibt.') }}
+  {{ field('Budget-Faktor (bei Modus × Faktor)', 'budget_faktor', (p.budget_faktor or 1)|qty, mode='decimal', hint='z. B. 1,00 oder 0,85 oder 1,15 (Warensumme aus verknüpften Angeboten × Faktor).') }}
+  </div>
+  {{ area('Notiz', 'notiz', p.notiz) }}
+  <div class="actions"><button class="btn">Speichern</button><a class="btn sek" href="{{ url_for('main.projekte') if neu else url_for('main.projekte', p=p.id, status='alle') }}">Abbrechen</a></div>
+</form>
+{% endblock %}

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="de" data-theme="{{ theme }}">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Selbsttest</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head>
+<body><main>
+<div class="panel narrow">
+  <h1>Selbsttest der Rückgabe</h1>
+  <p>Ein Testwarenkorb wird jetzt so an die App geschickt, wie es der Shop tut (über den Browser an die Rückgabe-Adresse). Gleich öffnet sich die Bestellmaske mit zwei Testpositionen. Wenn das klappt, funktioniert die App-Seite, und ein fehlender Button liegt am Shop oder an den Einstellungen.</p>
+  <form id="test" method="post" action="{{ hook }}" enctype="multipart/form-data" accept-charset="utf-8">
+    <input type="hidden" name="warenkorb" value="{{ xml }}">
+    <button class="btn">Weiter</button>
+  </form>
+</div></main>
+<script>document.getElementById('test').submit();</script>
+</body></html>

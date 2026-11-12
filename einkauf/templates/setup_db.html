@@ -1,0 +1,26 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf, field with context %}{% block title %}Einrichtung{% endblock %}
+{% block content %}
+<form method="post" class="panel narrow">
+  <h1>Einrichtung: Datenbank</h1>
+  <p>Schritt 1 von 2. Die Anwendung legt alle Tabellen selbst an. Die Datenbank (z. B. <em>einkauf</em>) und ein Datenbankbenutzer mit allen Rechten darauf müssen auf dem NAS schon existieren.</p>
+  {% if fehler %}<div class="flash fehler">{{ fehler }}</div>{% endif %}
+  {{ csrf() }}
+  <label class="f"><span>Datenbank</span>
+    <select name="type" id="typ">
+      <option value="mariadb" {{ 'selected' if form.type == 'mariadb' }}>MariaDB / MySQL (empfohlen)</option>
+      <option value="sqlite" {{ 'selected' if form.type == 'sqlite' }}>Lokale Datei (SQLite, nur zum Testen)</option>
+    </select></label>
+  <div id="maria">
+    {{ field('Host / IP des NAS', 'host', form.host, hint='z. B. 192.168.1.20') }}
+    {{ field('Port', 'port', form.port, mode='numeric') }}
+    {{ field('Datenbankname', 'name', form.name) }}
+    {{ field('Benutzer', 'user', form.user) }}
+    {{ field('Passwort', 'password', form.password, type='password') }}
+  </div>
+  <button class="btn">Verbindung testen und weiter</button>
+</form>
+<script>
+const t=document.getElementById('typ'),m=document.getElementById('maria');
+function s(){m.style.display=t.value==='sqlite'?'none':'block'} t.onchange=s; s();
+</script>
+{% endblock %}

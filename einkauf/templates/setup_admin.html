@@ -1,0 +1,14 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf, field with context %}{% block title %}Einrichtung{% endblock %}
+{% block content %}
+<form method="post" class="panel narrow">
+  <h1>Einrichtung: Admin-Benutzer</h1>
+  <p>Schritt 2 von 2. Dieser erste Benutzer wird automatisch Admin und kann später weitere Benutzer anlegen.</p>
+  {% if fehler %}<div class="flash fehler">{{ fehler }}</div>{% endif %}
+  {{ csrf() }}
+  {{ field('Firmenname (erscheint oben links)', 'firma', firma) }}
+  {{ field('Benutzername', 'username', name, required=True) }}
+  {{ field('Passwort', 'password', '', type='password', required=True, hint='Mindestens 8 Zeichen') }}
+  {{ field('Passwort wiederholen', 'password2', '', type='password', required=True) }}
+  <button class="btn">Einrichtung abschließen</button>
+</form>
+{% endblock %}

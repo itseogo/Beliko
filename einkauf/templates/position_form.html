@@ -1,0 +1,41 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf, field with context %}{% block title %}Position bearbeiten{% endblock %}
+{% block content %}
+<form method="post" class="panel">
+  <h1>Position bearbeiten</h1>
+  {% if fehler %}<div class="flash fehler">{{ fehler }}</div>{% endif %}
+  <p class="meta">Bestellung bei {{ i.order.supplier.name }} vom {{ i.order.bestelldatum|datum }}. Bereits geliefert: {{ i.geliefert|qty }}.</p>
+  {{ csrf() }}
+  <div class="grid2">
+    {{ field('Artikelnummer', 'artikelnr', i.artikelnr) }}
+    {{ field('Bezeichnung', 'bezeichnung', i.bezeichnung, required=True) }}
+    {{ field('Menge', 'menge', i.menge|qty, required=True, mode='decimal') }}
+    {{ field('Einheit', 'einheit', i.einheit) }}
+    {{ field('Einzelpreis netto', 'preis', i.preis|moneyinp, mode='decimal') }}
+    {{ field('Kommission', 'kommission', i.kommission, hint='z. B. kirsch 2x / 1x Lager') }}
+    {{ field('Voraussichtlich geliefert', 'erw_lieferdatum', i.erw_lieferdatum.isoformat() if i.erw_lieferdatum else '', type='date') }}
+    <label class="f"><span>Projekt</span><select name="project_id"><option value="">Ohne Projekt</option>
+      {% for p in projekte %}<option value="{{ p.id }}" {{ 'selected' if p.id == i.project_id }}>{{ p.nummer }} {{ p.name }}</option>{% endfor %}</select></label>
+  </div>
+  <div class="actions">
+    <button class="btn" name="aktion" value="speichern">Speichern</button>
+    <a class="btn sek" href="{{ url_for('main.bestellung_detail', oid=i.order_id) }}">Abbrechen</a>
+    <button class="btn sek" name="aktion" value="storno" formnovalidate>{{ 'Storno aufheben' if i.storniert else 'Position stornieren' }}</button>
+    {% if not i.delivery_items %}<button class="btn gefahr" name="aktion" value="loeschen" formnovalidate onclick="return confirm('Position endgültig löschen?')">Löschen</button>{% endif %}
+  </div>
+</form>
+
+{% if i.menge > 1 and not i.storniert %}
+<form method="post" action="{{ url_for('main.position_aufteilen', iid=i.id) }}" class="panel">
+  <h3>Position auf ein weiteres Projekt aufteilen</h3>
+  <p class="meta">Zum Beispiel 5 Stück, davon 2 für ein anderes Projekt. Es entsteht eine zweite Position mit gleicher Artikelnummer. Der Wareneingang verteilt sich beim UGL-Import automatisch auf beide.</p>
+  {{ csrf() }}
+  <div class="grid2">
+    {{ field('Menge für den neuen Teil', 'menge_neu', '', required=True, mode='decimal') }}
+    <label class="f"><span>Projekt des neuen Teils</span><select name="project_id"><option value="">Ohne Projekt (Lager)</option>
+      {% for p in projekte %}<option value="{{ p.id }}">{{ p.nummer }} {{ p.name }}</option>{% endfor %}</select></label>
+    {{ field('Kommission des neuen Teils', 'kommission_neu', '') }}
+  </div>
+  <button class="btn sek">Aufteilen</button>
+</form>
+{% endif %}
+{% endblock %}

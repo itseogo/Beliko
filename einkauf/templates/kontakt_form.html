@@ -1,0 +1,62 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf, field, area with context %}{% block title %}{{ 'Kontakt anlegen' if neu else 'Kontakt bearbeiten' }}{% endblock %}
+{% block content %}
+<form method="post" class="panel">
+  <h1>{{ 'Kontakt anlegen' if neu else 'Kontakt bearbeiten' }}</h1>
+  {% if fehler %}<div class="flash fehler">{{ fehler }}</div>{% endif %}
+  {{ csrf() }}
+  <input type="hidden" name="version" value="{{ c.version or 1 }}">
+  <h3>Allgemein</h3>
+  <div class="grid2">
+    <label class="f"><span>Art</span><select name="typ" id="typ">
+      <option value="firma" {{ 'selected' if c.typ == 'firma' }}>Firma</option>
+      <option value="person" {{ 'selected' if c.typ == 'person' }}>Privatperson</option></select></label>
+    <div class="f"><span>Rolle</span>
+      <label class="check"><input type="checkbox" name="ist_kunde" value="1" {{ 'checked' if c.ist_kunde }}> Kunde</label>
+      <label class="check"><input type="checkbox" name="ist_lieferant" value="1" {{ 'checked' if c.ist_lieferant }}> Lieferant</label></div>
+    {{ field('Firmenname', 'firma', c.firma, autofocus=neu, hint='Pflicht bei Firma') }}
+    {{ field('Kundennummer', 'kunde_nr', c.kunde_nr) }}
+    {{ field('Anrede', 'anrede', c.anrede, hint='bei Privatperson, z. B. Herr oder Frau') }}
+    {{ field('Lieferantennummer', 'lieferant_nr', c.lieferant_nr) }}
+    {{ field('Vorname', 'vorname', c.vorname, hint='bei Privatperson') }}
+    {{ field('Nachname', 'nachname', c.nachname, hint='Pflicht bei Privatperson') }}
+  </div>
+
+  <h3>Rechnungsadresse</h3>
+  <div class="grid2">
+    {{ field('Zusatz', 're_zusatz', c.re_zusatz) }}{{ field('Straße und Hausnummer', 're_strasse', c.re_strasse) }}
+    {{ field('PLZ', 're_plz', c.re_plz) }}{{ field('Ort', 're_ort', c.re_ort) }}
+    {{ field('Land (Kürzel)', 're_land', c.re_land, hint='z. B. DE') }}
+  </div>
+  <h3>Lieferadresse</h3>
+  <div class="grid2">
+    {{ field('Zusatz', 'li_zusatz', c.li_zusatz) }}{{ field('Straße und Hausnummer', 'li_strasse', c.li_strasse) }}
+    {{ field('PLZ', 'li_plz', c.li_plz) }}{{ field('Ort', 'li_ort', c.li_ort) }}
+    {{ field('Land (Kürzel)', 'li_land', c.li_land, hint='z. B. DE') }}
+  </div>
+
+  <h3>E-Mail und Telefon</h3>
+  <div class="grid4">
+    {{ field('E-Mail geschäftlich', 'email_geschaeft', c.email_geschaeft, type='email') }}
+    {{ field('E-Mail Büro', 'email_buero', c.email_buero, type='email') }}
+    {{ field('E-Mail privat', 'email_privat', c.email_privat, type='email') }}
+    {{ field('E-Mail sonstige', 'email_sonstige', c.email_sonstige, type='email') }}
+    {{ field('Telefon geschäftlich', 'tel_geschaeft', c.tel_geschaeft) }}
+    {{ field('Telefon Büro', 'tel_buero', c.tel_buero) }}
+    {{ field('Mobil', 'tel_mobil', c.tel_mobil) }}
+    {{ field('Telefon privat', 'tel_privat', c.tel_privat) }}
+    {{ field('Fax', 'tel_fax', c.tel_fax) }}
+    {{ field('Telefon sonstige', 'tel_sonstige', c.tel_sonstige) }}
+  </div>
+
+  <h3>Steuer und Rechnung (bei Firma)</h3>
+  <div class="grid2">
+    {{ field('Steuernummer', 'steuernummer', c.steuernummer) }}
+    {{ field('USt-IdNr.', 'ust_idnr', c.ust_idnr) }}
+    {{ field('Leitweg-ID (XRechnung)', 'leitweg_id', c.leitweg_id, hint='Nur für Behörden') }}
+    {{ field('Unsere Lieferantennummer beim Kunden', 'lieferantennr_beim_kunden', c.lieferantennr_beim_kunden) }}
+  </div>
+  <label class="check"><input type="checkbox" name="steuerfrei" value="1" {{ 'checked' if c.steuerfrei }}> Steuerfreie Rechnungen erlaubt</label>
+  {{ area('Notiz', 'notiz', c.notiz) }}
+  <div class="actions"><button class="btn">Speichern</button><a class="btn sek" href="{{ url_for('main.kontakte') if neu else url_for('main.kontakt_detail', cid=c.id) }}">Abbrechen</a></div>
+</form>
+{% endblock %}

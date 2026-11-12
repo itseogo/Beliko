@@ -1,0 +1,31 @@
+{% extends 'base.html' %}{% block title %}Kontakte{% endblock %}
+{% block content %}
+<div class="kopf"><h1>Kontakte</h1>
+</div>
+<p class="meta">Kunden und Lieferanten. Die Auswahl „Kunde“ im Projekt greift auf diese Liste zu. Später werden die Kontakte aus Lexoffice hierher synchronisiert und sind dann schreibgeschützt. Selbst angelegte bleiben bearbeitbar.</p>
+{% if g.user.role == 'admin' and lex_bereit %}
+<form method="post" action="{{ url_for('main.lexoffice_sync') }}" class="leiste">{% from '_m.html' import csrf with context %}{{ csrf() }}
+  <button class="btn sek">Jetzt mit Lexoffice abgleichen</button><span class="meta">Einstellungen und Optionen: Einstellungen → Lexoffice</span></form>
+{% endif %}
+<form method="get" class="leiste">
+  <label class="f"><span>Suchen</span><input name="q" value="{{ suche }}" placeholder="Name, Nummer, Ort, E-Mail oder Telefon"></label>
+  <label class="f"><span>Rolle</span><select name="rolle" onchange="this.form.submit()">
+    <option value="alle" {{ 'selected' if rolle == 'alle' }}>Alle</option>
+    <option value="kunden" {{ 'selected' if rolle == 'kunden' }}>Kunden</option>
+    <option value="lieferanten" {{ 'selected' if rolle == 'lieferanten' }}>Lieferanten</option></select></label>
+  <label class="check" style="margin-bottom:.9rem"><input type="checkbox" name="archiv" value="1" {{ 'checked' if archiv }} onchange="this.form.submit()"> Archivierte zeigen</label>
+  <button class="btn sek">Filtern</button>
+</form>
+{% if liste %}
+<div class="scroll"><table>
+<thead><tr><th>Name</th><th>Nummer</th><th>Rolle</th><th>Ort</th><th>Telefon</th><th>E-Mail</th><th>Quelle</th></tr></thead>
+<tbody>{% for c in liste %}
+<tr class="{{ 'storno' if c.archiviert }}">
+  <td><a href="{{ url_for('main.kontakt_detail', cid=c.id) }}">{{ c.name }}</a>{% if c.typ == 'person' %}<small class="sub">Privatperson</small>{% endif %}</td>
+  <td>{{ c.nummern }}</td>
+  <td>{{ 'Kunde' if c.ist_kunde }}{{ ' · ' if c.ist_kunde and c.ist_lieferant }}{{ 'Lieferant' if c.ist_lieferant }}</td>
+  <td>{{ c.ort }}</td><td>{{ c.telefon }}</td><td>{{ c.email }}</td>
+  <td>{{ 'Lexoffice' if c.quelle == 'lexoffice' else 'selbst angelegt' }}</td></tr>{% endfor %}</tbody></table></div>
+<p class="meta">{{ liste|length }} Kontakte</p>
+{% else %}<p class="leer">Keine Kontakte für diese Auswahl.{% if g.user.role != 'leser' %} Lege über „Neu“ oben einen an.{% endif %}</p>{% endif %}
+{% endblock %}

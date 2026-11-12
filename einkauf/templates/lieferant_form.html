@@ -1,0 +1,85 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf, field, area with context %}{% block title %}Lieferant{% endblock %}
+{% block content %}
+<form method="post" class="panel">
+  <h1>{{ 'Lieferant anlegen' if neu else 'Lieferant bearbeiten' }}</h1>
+  {% if fehler %}<div class="flash fehler">{{ fehler }}</div>{% endif %}
+  {{ csrf() }}
+  <input type="hidden" name="version" value="{{ s.version or 1 }}">
+  <div class="grid2">
+    {{ field('Name', 'name', s.name, required=True, autofocus=neu) }}
+    {{ field('Unsere Kundennummer dort', 'kundennr', s.kundennr) }}
+    {{ field('Ansprechpartner', 'ansprechpartner', s.ansprechpartner) }}
+    {{ field('Telefon', 'telefon', s.telefon) }}
+    {{ field('E-Mail', 'email', s.email, type='email') }}
+    <label class="f"><span>Verknüpfter Kontakt (optional)</span><select name="contact_id">
+      <option value="">– keiner –</option>
+      {% for k in kontakte %}<option value="{{ k.id }}" {{ 'selected' if s.contact_id == k.id }}>{{ k.name }}{% if k.lieferant_nr %} ({{ k.lieferant_nr }}){% endif %}</option>{% endfor %}
+    </select></label>
+  </div>
+  {{ area('Notiz', 'notiz', s.notiz) }}
+  <h2>UGL-Schnittstelle</h2>
+  <p class="meta">So holt oder sendet dieser Lieferant seine Daten. Die Angaben bekommst du vom Lieferanten. Das Einlesen der Dateien folgt in einer späteren Version, bis dahin dienen die Felder als Ablage.</p>
+  <div class="grid2">
+    <label class="f"><span>Übertragungsweg</span><select name="ugl_verfahren">
+      {% for w, t in [('', 'Nicht eingerichtet'), ('ftp', 'FTP'), ('ftps', 'FTPS (verschlüsselt)'), ('sftp', 'SFTP (noch nicht umgesetzt)'), ('datei', 'Datei (Ordner/Freigabe)'), ('url', 'Web-Adresse')] %}<option value="{{ w }}" {{ 'selected' if (s.ugl_verfahren or '') == w }}>{{ t }}</option>{% endfor %}</select></label>
+    {{ field('Server-Adresse', 'ugl_server', s.ugl_server, hint='z. B. ftp.lieferant.de') }}
+    {{ field('Port (optional)', 'ugl_port', s.ugl_port, mode='numeric', hint='Leer lassen für den Standard (FTP 21, SFTP 22).') }}
+    {{ field('Version / Format', 'ugl_format', s.ugl_format, hint='z. B. 04.00') }}
+    {{ field('Pfad Eingang', 'ugl_pfad_eingang', s.ugl_pfad_eingang, hint='Hierhin gehen Bestellungen an den Lieferanten.') }}
+    {{ field('Pfad Ausgang', 'ugl_pfad_ausgang', s.ugl_pfad_ausgang, hint='Von hier holst du Auftragsbestätigungen, Lieferscheine und Rechnungen ab.') }}
+    {{ field('Pfad ZUGFeRD', 'ugl_pfad_zugferd', s.ugl_pfad_zugferd, hint='Elektronische Rechnungen (PDF mit eingebetteten Daten).') }}
+    <label class="f"><span>Automatisch abrufen</span><select name="ugl_auto_min">
+      {% for w, t in [(0, 'Nein, nur auf Knopfdruck'), (15, 'Alle 15 Minuten'), (30, 'Alle 30 Minuten'), (60, 'Jede Stunde'), (240, 'Alle 4 Stunden')] %}<option value="{{ w }}" {{ 'selected' if (s.ugl_auto_min or 0) == w }}>{{ t }}</option>{% endfor %}</select>
+      <small>Die App holt dann neue Dateien aus dem Pfad Ausgang. Es wird nur gelesen, auf dem Server des Lieferanten wird nichts gelöscht.</small></label>
+    <label class="f"><span>Zertifikat prüfen (nur FTPS)</span><select name="ugl_tls_pruefen">
+      <option value="1" {{ 'selected' if s.ugl_tls_pruefen is none or s.ugl_tls_pruefen }}>Ja (empfohlen)</option>
+      <option value="0" {{ 'selected' if s.ugl_tls_pruefen is false }}>Nein, dem Server vertrauen</option></select></label>
+    {{ field('Zugang: Benutzer', 'ugl_benutzer', s.ugl_benutzer) }}
+    {{ field('Zugang: Passwort', 'ugl_passwort', '', type='password', hint='Wird verschlüsselt gespeichert. Leer lassen, um das vorhandene zu behalten.' if s.ugl_passwort_enc else 'Wird verschlüsselt gespeichert.') }}
+  </div>
+  {{ area('Hinweise zur Schnittstelle', 'ugl_notiz', s.ugl_notiz) }}
+  <h2>IDS-Connect (Shop)</h2>
+  <p class="meta">Damit holst du einen Warenkorb aus dem Online-Shop des Lieferanten direkt als neue Bestellung in die App (Menü Bestellwesen → Aus Shop übernehmen). Die Angaben bekommst du vom Lieferanten, meist heißt es „IDS-Zugang“ oder „IDS-Connect“.</p>
+  <div class="grid2">
+    {{ field('IDS-Adresse des Shops', 'ids_url', s.ids_url, hint='Das ist die Einstiegsadresse für IDS, nicht die normale Shop-Adresse. Bekannt: Fega & Schmitt: https://shop.fega.de/abtest/scripts/clsAIShop.php · Löffelhardt: https://online.loeffelhardt.de/punchout/ids. Sonst im Kundenbereich des Shops unter „IDS Einstellungen“ suchen oder im Browser ablesen (F12 → Netzwerk, erste Anfrage beim Start aus der Branchensoftware).') }}
+    {{ field('Kundennummer im Shop', 'ids_kndnr', s.ids_kndnr, hint='Falls der Shop sie verlangt.') }}
+    {{ field('Benutzername im Shop', 'ids_benutzer', s.ids_benutzer, hint='Oft ein eigener IDS-Benutzer des Lieferanten (z. B. mit der Endung „_ids“), nicht der normale Shop-Login. Er steht in deiner Branchensoftware beim Lieferanten unter IDS Connect.') }}
+    {{ field('Passwort im Shop', 'ids_passwort', '', type='password', hint='Wird verschlüsselt gespeichert. Leer lassen, um das vorhandene zu behalten.' if s.ids_passwort_enc else 'Wird verschlüsselt gespeichert.') }}
+    {% set vers = s.ids_version if s.ids_version is not none else '2.5' %}
+    <label class="f"><span>IDS-Version</span><select name="ids_version">
+      {% for w in ['2.5', '2.3', '2.2', '2.1', '2.0', '1.3'] %}<option value="{{ w }}" {{ 'selected' if vers == w }}>{{ w }}</option>{% endfor %}
+      <option value="" {{ 'selected' if vers == '' }}>keine Version senden</option></select>
+      <small>Nimm eine Version, die der Shop unterstützt. Der Verbindungstest unten zeigt sie an.</small></label>
+    <label class="f"><span>Aufruf des Shops</span><select name="ids_aufruf">
+      <option value="post" {{ 'selected' if (s.ids_aufruf or 'post') == 'post' }}>Formular (POST), wie in der Spezifikation</option>
+      <option value="get" {{ 'selected' if s.ids_aufruf == 'get' }}>Adresszeile (GET)</option></select>
+      <small>GET nur ausprobieren, wenn der Button im Shop fehlt. Das Passwort steht dann im Verlauf des Browsers.</small></label>
+    <label class="f"><span>Nettopreis im Warenkorb gilt für</span><select name="ids_preis_modus">
+      <option value="gesamt" {{ 'selected' if (s.ids_preis_modus or 'gesamt') == 'gesamt' }}>die ganze Menge (laut Spezifikation)</option>
+      <option value="einzel" {{ 'selected' if s.ids_preis_modus == 'einzel' }}>eine Einheit</option></select>
+      <small>Prüfe bei der ersten Übernahme in der Vorschau, ob die Einzelpreise stimmen, und stelle das hier ggf. um.</small></label>
+  </div>
+  <label class="check"><input type="checkbox" name="active" value="1" {{ 'checked' if s.active }}> Lieferant ist aktiv (erscheint bei neuen Bestellungen)</label>
+  <div class="actions"><button class="btn">Speichern</button><a class="btn sek" href="{{ url_for('main.lieferanten') }}">Abbrechen</a></div>
+</form>
+{% if not neu and s.ugl_verfahren in ('ftp', 'ftps', 'datei') %}
+<div class="panel">
+  <h3>Dateien des Lieferanten abrufen</h3>
+  <p class="meta">{% if s.ugl_letzter_abruf %}Letzter Abruf: {{ s.ugl_letzter_abruf.strftime('%d.%m.%Y %H:%M') }}{% if s.ugl_abruf_status %} · {{ s.ugl_abruf_status }}{% endif %}{% else %}Noch kein Abruf.{% endif %}
+  {% if s.ugl_verfahren == 'ftp' %}<br><b>Hinweis:</b> Normales FTP überträgt Passwort und Dateien unverschlüsselt. Wenn der Lieferant FTPS anbietet, nimm das.{% endif %}</p>
+  <div class="actions">
+    <form method="post" action="{{ url_for('main.ftp_test', sid=s.id) }}">{{ csrf() }}<button class="btn sek">Verbindung testen</button></form>
+    <form method="post" action="{{ url_for('main.dateien_abrufen') }}">{{ csrf() }}<input type="hidden" name="lieferant" value="{{ s.id }}"><button class="btn">Jetzt abrufen</button></form>
+  </div>
+  <p class="meta">Erst speichern, dann testen. Abgerufene Dateien erscheinen unter Bestellwesen → Lieferantendateien.</p>
+</div>
+{% endif %}
+{% if not neu and s.ids_url %}
+<form method="post" action="{{ url_for('main.ids_test', sid=s.id) }}" class="panel inline">
+  {{ csrf() }}
+  <input type="hidden" name="version" value="{{ s.version or 1 }}">
+  <div class="f"><b>IDS-Verbindung testen</b><br><span class="meta">Fragt den Shop mit den gespeicherten Angaben nach Versionen und Anmeldedaten. Erst speichern, dann testen.</span></div>
+  <button class="btn sek">Verbindung testen</button>
+</form>
+{% endif %}
+{% endblock %}

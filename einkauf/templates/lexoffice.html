@@ -1,0 +1,59 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf with context %}{% block title %}Lexoffice{% endblock %}
+{% block content %}
+<div class="kopf"><h1>Einstellungen</h1></div>
+<div class="tabs"><a href="{{ url_for('main.lieferanten') }}">Lieferanten</a><a href="{{ url_for('main.benutzer') }}">Benutzer</a><a href="{{ url_for('main.nummernkreise') }}">Nummernkreise</a><a class="on" href="{{ url_for('main.lexoffice') }}">Lexoffice</a></div>
+<p class="meta">Verbindung zu Lexoffice (Lexware Office). Der Abgleich läuft in <b>eine Richtung: von Lexoffice nach BeLiKo</b> und nur lesend. Es wird nichts in Lexoffice verändert. Aus Lexoffice übernommene Kontakte sind in BeLiKo schreibgeschützt, selbst angelegte bleiben unberührt.</p>
+{% if fehler %}<div class="flash fehler">{{ fehler }}</div>{% endif %}
+
+<form method="post" class="panel">
+  {{ csrf() }}
+  <h3>Verbindung</h3>
+  <label class="check"><input type="checkbox" name="lex_aktiv" value="1" {{ 'checked' if aktiv }}> Lexoffice-Schnittstelle einschalten</label>
+  <div class="grid2">
+    <label class="f"><span>API-Schlüssel</span><input type="password" name="lex_key" autocomplete="new-password" placeholder="{{ 'gespeichert, zum Ändern neuen Schlüssel eintragen' if hat_key else 'Schlüssel einfügen' }}">
+      <small>Erzeugen kannst du ihn in Lexoffice unter Einstellungen → Öffentliche API (nur Administratoren, der Tarif muss die API enthalten). Er wird verschlüsselt gespeichert und nie angezeigt. Ein Schlüssel mit nur Leserechten genügt, soweit Lexoffice das anbietet.</small></label>
+    <div class="f"><span>Status</span>{% if hat_key %}<span class="chip ok">Schlüssel gespeichert</span>
+      <label class="check"><input type="checkbox" name="lex_key_loeschen" value="1"> Gespeicherten Schlüssel löschen</label>{% else %}<span class="chip bald">noch kein Schlüssel</span>{% endif %}</div>
+  </div>
+  <details class="zusatz"><summary>Erweitert</summary>
+    <label class="f"><span>API-Adresse</span><input name="lex_url" value="{{ url }}"><small>Normalerweise unverändert (https://api.lexware.io). Die frühere Adresse api.lexoffice.io wurde laut Dokumentation Ende 2025 abgeschaltet.</small></label>
+  </details>
+
+  <h3>Was soll abgeglichen werden?</h3>
+  {% for o in optionen %}
+  <label class="check"><input type="checkbox" name="{{ o.key }}" value="1" {{ 'checked' if o.an }} {{ 'disabled' if not o.umgesetzt }}> {{ o.titel }}{% if not o.umgesetzt %} <span class="chip">folgt später</span>{% endif %}</label>
+  {% endfor %}
+  <label class="f" style="max-width:24rem"><span>Wann?</span><select name="lex_intervall" disabled><option>Nur auf Knopfdruck</option></select><small>Ein automatischer Abgleich (z. B. nachts) folgt später.</small></label>
+  <button class="btn">Speichern</button>
+</form>
+
+<div class="panel">
+  <h3>Prüfen und abgleichen</h3>
+  <p class="meta">Zuerst speichern, dann testen. Der Abgleich holt Kontakte (je 250 pro Anfrage) und die oben gewählten Belege (Angebote, Aufträge, Rechnungen). Kontakte, die in Lexoffice nicht mehr vorkommen oder durch die Optionen oben ausgeschlossen sind, werden in BeLiKo archiviert, nicht gelöscht.</p>
+  <div class="actions">
+    <form method="post" action="{{ url_for('main.lexoffice_test') }}">{{ csrf() }}<button class="btn sek">Verbindung testen</button></form>
+    <form method="post" action="{{ url_for('main.lexoffice_sync') }}">{{ csrf() }}<button class="btn" {{ 'disabled' if not (aktiv and hat_key) }}>Jetzt abgleichen</button></form>
+  </div>
+  {% if not (aktiv and hat_key) %}<p class="meta">Der Abgleich ist verfügbar, sobald die Schnittstelle eingeschaltet und ein Schlüssel gespeichert ist.</p>{% endif %}
+</div>
+
+<div class="panel">
+  <h3>Letzter Abgleich</h3>
+  {% if letzter %}
+    <p>{{ letzter.zeit }}{% if letzter.fehler %} · <b>fehlgeschlagen:</b> {{ letzter.fehler }}{% endif %}</p>
+    {% if letzter.ergebnis %}<table class="kv">
+      <tr><th>Kontakte in Lexoffice</th><td>{{ letzter.ergebnis.gesamt }}</td></tr>
+      <tr><th>Neu</th><td>{{ letzter.ergebnis.neu }}</td></tr>
+      <tr><th>Aktualisiert</th><td>{{ letzter.ergebnis.aktualisiert }}</td></tr>
+      <tr><th>Unverändert</th><td>{{ letzter.ergebnis.unveraendert }}</td></tr>
+      <tr><th>Archiviert</th><td>{{ letzter.ergebnis.archiviert }}</td></tr>
+      <tr><th>Nicht übernommen (laut Optionen)</th><td>{{ letzter.ergebnis.uebersprungen }}</td></tr></table>{% endif %}
+    {% if letzter.belege %}<table class="kv" style="margin-top:.75rem">
+      <tr><th>Belege in Lexoffice</th><td>{{ letzter.belege.gesamt }}</td></tr>
+      <tr><th>Belege neu</th><td>{{ letzter.belege.neu }}</td></tr>
+      <tr><th>Belege aktualisiert</th><td>{{ letzter.belege.aktualisiert }}</td></tr>
+      <tr><th>Belege unverändert</th><td>{{ letzter.belege.unveraendert }}</td></tr></table>{% endif %}
+  {% else %}<p class="meta">Noch kein Abgleich durchgeführt.</p>{% endif %}
+  <p class="meta">In BeLiKo stehen derzeit {{ anzahl }} Kontakte aus Lexoffice (<a href="{{ url_for('main.kontakte') }}">Zu den Kontakten</a>) sowie {{ belege_anz.angebot }} Angebote, {{ belege_anz.auftrag }} Aufträge und {{ belege_anz.rechnung }} Rechnungen (<a href="{{ url_for('main.lex_belege') }}">Zu den Belegen</a>).</p>
+</div>
+{% endblock %}

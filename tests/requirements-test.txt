@@ -1,0 +1,3 @@
+# Nur für test_ftp.py (Schein-FTP-Server). Ohne diese Pakete wird der FTP-Test übersprungen.
+pyftpdlib
+pyopenssl

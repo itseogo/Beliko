@@ -1,0 +1,36 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf with context %}{% block title %}Protokoll & Sperren{% endblock %}
+{% block content %}
+<div class="kopf"><h1>Protokoll &amp; Bearbeitungssperren</h1></div>
+
+<div class="panel">
+  <h3>Aktive Bearbeitungssperren ({{ sperren|length }})</h3>
+  {% if sperren %}
+  <div class="scroll"><table>
+    <thead><tr><th>Bereich</th><th>ID</th><th>Benutzer</th><th>Seit</th><th>Gültig bis</th><th></th></tr></thead>
+    <tbody>{% for s in sperren %}<tr>
+      <td>{{ s.obj_typ }}</td><td>{{ s.obj_id }}</td><td><b>{{ s.username }}</b></td>
+      <td>{{ s.seit.strftime('%d.%m.%Y %H:%M') }}</td><td>{{ s.ablauf.strftime('%d.%m.%Y %H:%M') }}</td>
+      <td><form method="post" action="{{ url_for('main.sperre_freigeben', obj_typ=s.obj_typ, obj_id=s.obj_id) }}">{{ csrf() }}<button class="btn sek">Sperre aufheben</button></form></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="meta">Aktuell ist kein Eintrag gesperrt.</p>{% endif %}
+</div>
+
+<div class="panel">
+  <h3>Änderungsprotokoll (letzte 200 Einträge)</h3>
+  {% if eintraege %}
+  <div class="scroll"><table>
+    <thead><tr><th>Zeit</th><th>Benutzer</th><th>Aktion</th><th>Bereich</th><th>Eintrag</th><th>Details</th></tr></thead>
+    <tbody>{% for e in eintraege %}<tr>
+      <td>{{ e.zeit.strftime('%d.%m.%Y %H:%M') }}</td>
+      <td>{{ e.username or '–' }}</td>
+      <td><span class="chip">{{ e.aktion }}</span></td>
+      <td>{{ e.obj_typ }}</td>
+      <td>{{ e.obj_name or ('#' ~ e.obj_id if e.obj_id else '–') }}</td>
+      <td>{{ e.details or '' }}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="meta">Noch keine Protokolleinträge vorhanden.</p>{% endif %}
+</div>
+{% endblock %}
+

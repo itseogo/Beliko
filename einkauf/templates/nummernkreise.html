@@ -1,0 +1,90 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf, field with context %}{% block title %}Nummernkreise{% endblock %}
+{% block content %}
+<div class="kopf"><h1>Einstellungen</h1></div>
+<div class="tabs"><a href="{{ url_for('main.lieferanten') }}">Lieferanten</a><a href="{{ url_for('main.benutzer') }}">Benutzer</a><a class="on" href="{{ url_for('main.nummernkreise') }}">Nummernkreise</a><a href="{{ url_for('main.lexoffice') }}">Lexoffice</a></div>
+<p class="meta">Beim Anlegen eines neuen Projekts oder einer neuen Bestellung schlägt die App die nächste Nummer nach diesem Muster vor. Im Formular kannst du den Vorschlag überschreiben.</p>
+
+<div class="panel hilfe">
+  <b>Platzhalter im Muster</b>
+  <table class="kv">
+    <tr><th><code>YYYY</code></th><td>Jahr vierstellig (heute <span id="h-yyyy"></span>)</td></tr>
+    <tr><th><code>YY</code></th><td>Jahr zweistellig (<span id="h-yy"></span>)</td></tr>
+    <tr><th><code>MM</code></th><td>Monat (<span id="h-mm"></span>)</td></tr>
+    <tr><th><code>DD</code></th><td>Tag (<span id="h-dd"></span>)</td></tr>
+    <tr><th><code>XXXX</code></th><td>laufende Nummer, die Anzahl der X ist die Stellenzahl (4 ergibt 0001). Genau eine X-Folge.</td></tr>
+  </table>
+  <p class="meta">Alles andere (Buchstaben, Ziffern, - _ . /) bleibt, wie du es schreibst. Die Buchstaben Y, M, D und X sind reserviert.</p>
+</div>
+
+{% if fehler %}<div class="flash fehler">{{ fehler }}</div>{% endif %}
+<form method="post" id="nk" data-heute="{{ heute.isoformat() }}">
+{{ csrf() }}
+{% for k, r in kreise.items() %}
+<div class="panel kreis" data-k="{{ k }}">
+  <h3>{{ titel[k] }}</h3>
+  <p class="vorschau-zeile">Nächste Nummer: <b class="vorschau" id="{{ k }}-v1">{{ bsp.get(k, '–') }}</b> <span class="meta">danach <span id="{{ k }}-v2"></span></span></p>
+  <p class="meldung" id="{{ k }}-fehler" role="alert"></p>
+  <div class="grid4">
+    <label class="f"><span>Muster</span><input name="{{ k }}_muster" id="{{ k }}-muster" value="{{ r.muster }}" autocomplete="off" spellcheck="false"></label>
+    {{ field('Nächste laufende Nummer', k ~ '_naechste', r.naechste, mode='numeric', hint='Der Zähler im Muster (X…X).') }}
+    <label class="f"><span>Zähler zurücksetzen</span><select name="{{ k }}_reset">
+      {% for w, t in reset.items() %}<option value="{{ w }}" {{ 'selected' if (r.reset or 'auto') == w }}>{{ t }}</option>{% endfor %}</select>
+      <small>„Automatisch“: Enthält das Muster einen Tag (DD), beginnt der Zähler täglich neu, bei Monat (MM) monatlich, bei Jahr (YY) jährlich.</small></label>
+    {{ field('Dann beginnt er bei', k ~ '_start', r.start, mode='numeric') }}
+  </div>
+  <p class="beispiele">Beispiele:
+    {% for b in ['P-YYYY-XXXX', 'YYMMDDXXXX', 'YYMMXXXX', '2265XXXX', 'B-XXXXX'] %}<button type="button" class="chip bsp-knopf" data-muster="{{ b }}">{{ b }}</button>{% endfor %}</p>
+</div>
+{% endfor %}
+<div class="actions"><button class="btn">Speichern</button></div>
+</form>
+
+<script>
+(function () {
+  var form = document.getElementById('nk');
+  var heute = new Date(form.dataset.heute + 'T12:00:00');
+  function p2(n) { return String(n).padStart(2, '0'); }
+  function fmt(m, n) {
+    return m.replace(/YYYY|YY|MM|DD|X+/g, function (t) {
+      if (t === 'YYYY') return String(heute.getFullYear());
+      if (t === 'YY') return p2(heute.getFullYear() % 100);
+      if (t === 'MM') return p2(heute.getMonth() + 1);
+      if (t === 'DD') return p2(heute.getDate());
+      return String(n).padStart(t.length, '0');
+    });
+  }
+  function pruefe(m) {
+    if (!m) return 'Bitte ein Muster eingeben.';
+    if (m.length > 40 || !/^[A-Za-z0-9\-_.\/]+$/.test(m)) return 'Erlaubt sind nur Buchstaben, Ziffern und - _ . /';
+    if (/[YMDX]/.test(m.replace(/YYYY|YY|MM|DD|X+/g, ''))) return 'Y, M, D und X sind reserviert: YYYY, YY, MM, DD und X für die laufende Nummer.';
+    var x = m.match(/X+/g) || [];
+    if (x.length !== 1) return 'Das Muster braucht genau eine Folge aus X für die laufende Nummer, z. B. XXXX.';
+    if (x[0].length > 10) return 'Höchstens 10 Stellen.';
+    return '';
+  }
+  document.getElementById('h-yyyy').textContent = fmt('YYYY', 0);
+  document.getElementById('h-yy').textContent = fmt('YY', 0);
+  document.getElementById('h-mm').textContent = fmt('MM', 0);
+  document.getElementById('h-dd').textContent = fmt('DD', 0);
+  document.querySelectorAll('.kreis').forEach(function (box) {
+    var k = box.dataset.k;
+    var muster = document.getElementById(k + '-muster');
+    var nae = box.querySelector('[name=' + k + '_naechste]');
+    function aktualisieren() {
+      var m = muster.value.trim(), f = pruefe(m);
+      var n = parseInt(nae.value, 10); if (!(n >= 1)) n = 1;
+      document.getElementById(k + '-fehler').textContent = f;
+      document.getElementById(k + '-v1').textContent = f ? '–' : fmt(m, n);
+      document.getElementById(k + '-v2').textContent = f ? '' : fmt(m, n + 1);
+      muster.classList.toggle('ungueltig', !!f);
+    }
+    muster.addEventListener('input', aktualisieren);
+    nae.addEventListener('input', aktualisieren);
+    box.querySelectorAll('.bsp-knopf').forEach(function (b) {
+      b.addEventListener('click', function () { muster.value = b.dataset.muster; aktualisieren(); muster.focus(); });
+    });
+    aktualisieren();
+  });
+})();
+</script>
+{% endblock %}

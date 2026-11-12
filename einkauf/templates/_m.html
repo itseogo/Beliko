@@ -1,0 +1,15 @@
+{% macro csrf() %}<input type="hidden" name="_csrf" value="{{ csrf_token() }}">{% endmacro %}
+{% macro field(label, name, value="", type="text", required=False, hint="", mode="", autofocus=False) %}
+<label class="f"><span>{{ label }}{% if required %} *{% endif %}</span>
+<input type="{{ type }}" name="{{ name }}" value="{{ value if value is not none else '' }}"{% if required %} required{% endif %}{% if mode %} inputmode="{{ mode }}"{% endif %}{% if autofocus %} autofocus{% endif %}>
+{% if hint %}<small>{{ hint }}</small>{% endif %}</label>
+{% endmacro %}
+{% macro area(label, name, value="") %}
+<label class="f"><span>{{ label }}</span><textarea name="{{ name }}" rows="3">{{ value or '' }}</textarea></label>
+{% endmacro %}
+{% macro auswahl(label, name, optionen, gewaehlt="", leer=None) %}
+<label class="f"><span>{{ label }}</span><select name="{{ name }}">
+{% if leer is not none %}<option value="">{{ leer }}</option>{% endif %}
+{% for wert, titel in optionen %}<option value="{{ wert }}"{% if wert|string == gewaehlt|string %} selected{% endif %}>{{ titel }}</option>{% endfor %}
+</select></label>
+{% endmacro %}

@@ -1,0 +1,99 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf, field with context %}{% block title %}Bestellung {{ o.supplier.name }}{% endblock %}
+{% block content %}
+{% set bearbeiten = g.user.role != 'leser' %}
+{% if von_projekt %}<p class="krumen"><a href="{{ url_for('main.projekte', p=von_projekt.id, status='alle') }}#unten">← Zurück zum Projekt {{ von_projekt.nummer }} · {{ von_projekt.name }}</a></p>
+{% else %}<p class="krumen"><a href="{{ url_for('main.bestellungen') }}">← Zurück zu den Bestellungen</a></p>{% endif %}
+<div class="kopf"><div><h1>{{ o.supplier.name }}</h1>
+<p class="meta">Bestellt am {{ o.bestelldatum|datum }}{% if o.bestellnr %} · Bestellnr. {{ o.bestellnr }}{% endif %}{% if o.ab_nr %} · AB {{ o.ab_nr }}{% endif %}{% if o.wunschtermin %} · Wunschtermin {{ o.wunschtermin|datum }}{% endif %} · Summe {{ o.summe|money }} netto</p></div>
+<a class="btn sek" href="{{ url_for('main.bestellung_ugl_export', oid=o.id) }}">UGL-Datei herunterladen</a></div>
+<div class="statusleiste">
+  <span class="chip s-{{ o.status }}">{{ BEST_STATUS[o.status] }}</span>
+  {% if o.bestellt_am %}<span class="meta">bestellt am {{ o.bestellt_am|datum }}</span>{% endif %}
+  {% if o.bezahlt_am %}<span class="meta">bezahlt am {{ o.bezahlt_am|datum }}</span>{% endif %}
+  {% if bearbeiten %}
+  <form method="post" action="{{ url_for('main.bestellung_status', oid=o.id) }}">{{ csrf() }}
+    {% if o.status == 'neu' %}<button class="btn" name="aktion" value="bestellt">Als bestellt markieren</button>
+    {% elif o.status == 'bestellt' %}<button class="btn sek" name="aktion" value="neu">Zurück auf Neu</button>
+    {% elif o.status == 'komplett' %}<input type="date" name="bezahlt_am" value="{{ heute.isoformat() }}" class="datum" aria-label="Bezahlt am"><button class="btn" name="aktion" value="abschliessen">Als bezahlt abschließen</button>
+    {% elif o.status == 'abgeschlossen' %}<button class="btn sek" name="aktion" value="oeffnen">Wieder öffnen</button>{% endif %}
+  </form>{% endif %}
+</div>
+{% if o.status == 'neu' %}<div class="flash warn">Diese Bestellung steht noch auf „Neu“. Ihre Positionen erscheinen erst im Rückstand und in den Projektsummen, wenn du sie als bestellt markierst.</div>{% endif %}
+{% if o.notiz %}<p>{{ o.notiz }}</p>{% endif %}
+
+<h2 id="positionen">Positionen</h2>
+{% if o.items %}
+<div class="scroll"><table>
+<thead><tr><th>Artikel</th><th>Projekt</th><th class="r">Bestellt</th><th class="r">Geliefert</th><th class="r">Rest</th><th>Status</th><th>Voraussichtlich</th><th class="r">Preis</th>{% if bearbeiten %}<th></th>{% endif %}</tr></thead>
+<tbody>{% for i in o.items %}
+<tr class="{{ i.faellig }} {{ 'storno' if i.storniert }}">
+  <td>{{ i.bezeichnung }}{% if i.artikelnr %}<small class="sub">{{ i.artikelnr }}</small>{% endif %}{% if i.kommission %}<small class="sub">Kommission: {{ i.kommission }}</small>{% endif %}{% if i.hinweis %}<small class="sub hinweis">{{ i.hinweis }}</small>{% endif %}</td>
+  <td>{{ i.project.nummer if i.project else '–' }}</td>
+  <td class="r">{{ i.menge|qty }} {{ i.einheit or '' }}</td><td class="r">{{ i.geliefert|qty }}</td><td class="r">{{ i.rest|qty if not i.storniert else '' }}</td>
+  <td>{{ i.status }}</td><td>{{ i.erw_lieferdatum|datum }}</td>
+  <td class="r">{{ i.preis|preis if i.preis is not none else '–' }}</td>
+  {% if bearbeiten %}<td><a href="{{ url_for('main.position_bearbeiten', iid=i.id) }}">Bearbeiten</a></td>{% endif %}
+</tr>{% endfor %}</tbody></table></div>
+{% else %}<p class="leer">Noch keine Positionen. Erfasse unten die erste.</p>{% endif %}
+
+{% if bearbeiten %}
+<form method="post" action="{{ url_for('main.position_neu', oid=o.id) }}" class="panel">
+  <h3>Position hinzufügen</h3>{{ csrf() }}
+  <div class="grid4">
+    {{ field('Artikelnummer', 'artikelnr', '') }}
+    {{ field('Bezeichnung', 'bezeichnung', '', required=True) }}
+    {{ field('Menge', 'menge', '', required=True, mode='decimal') }}
+    {{ field('Einheit', 'einheit', 'Stück', hint='Stück, m, Rolle …') }}
+    {{ field('Einzelpreis netto', 'preis', '', mode='decimal') }}
+    {{ field('Voraussichtlich geliefert', 'erw_lieferdatum', '', type='date') }}
+    {{ field('Kommission', 'kommission', '', hint='z. B. kirsch 2x / 1x Lager') }}
+    <label class="f"><span>Projekt</span><select name="project_id"><option value="">Ohne Projekt</option>
+      {% for p in projekte %}<option value="{{ p.id }}">{{ p.nummer }} {{ p.name }}</option>{% endfor %}</select></label>
+  </div>
+  <button class="btn">Position hinzufügen</button>
+</form>
+
+{% if offene %}
+<h2>Wareneingang buchen</h2>
+<form method="post" action="{{ url_for('main.wareneingang', oid=o.id) }}" class="panel">
+  {{ csrf() }}
+  <div class="grid4">
+    {{ field('Lieferschein-Nr.', 'lieferschein_nr', '') }}
+    {{ field('Lieferdatum', 'datum', heute.isoformat(), type='date') }}
+  </div>
+  <table class="eingang"><thead><tr><th>Artikel</th><th class="r">Rest offen</th><th class="r">Heute geliefert</th></tr></thead><tbody>
+  {% for i in offene %}<tr><td>{{ i.bezeichnung }}</td><td class="r">{{ i.rest|qty }} {{ i.einheit or '' }}</td>
+  <td class="r"><input name="menge_{{ i.id }}" inputmode="decimal" placeholder="0" class="kurz"></td></tr>{% endfor %}
+  </tbody></table>
+  <div class="actions"><button class="btn">Eingetragene Mengen buchen</button>
+  <button class="btn sek" name="alles" value="1" onclick="return confirm('Alle offenen Restmengen als geliefert buchen?')">Alles als geliefert buchen</button></div>
+</form>
+
+<form method="post" action="{{ url_for('main.termin_setzen', oid=o.id) }}" class="panel inline">
+  {{ csrf() }}
+  {{ field('Liefertermin für alle offenen Positionen setzen (z. B. laut Auftragsbestätigung)', 'termin', '', type='date') }}
+  <button class="btn sek">Termin setzen</button>
+</form>
+{% endif %}
+{% endif %}
+
+{% if bearbeiten %}
+<details class="zusatz" {{ 'open' if o.status in ('bestellt', 'teilgeliefert') }}>
+  <summary>Lieferantendatei einlesen (UGL)</summary>
+  <p class="meta">Lade eine Datei aus dem Ausgang-Ordner des Lieferanten hoch, zum Beispiel <code>B0261027.001</code>. Du siehst zuerst eine Vorschau und entscheidest dann, was übernommen wird.</p>
+  <form method="post" action="{{ url_for('main.ugl_hochladen', oid=o.id) }}" enctype="multipart/form-data" class="inline">
+    {{ csrf() }}
+    <label class="f"><span>Datei</span><input type="file" name="datei" required></label>
+    <button class="btn">Datei prüfen</button>
+  </form>
+</details>
+{% endif %}
+
+{% if o.deliveries %}
+<h2>Bisherige Lieferungen</h2>
+{% for d in o.deliveries|reverse %}
+<div class="lieferung"><b>{{ d.datum|datum }}</b>{% if d.lieferschein_nr %} · Lieferschein {{ d.lieferschein_nr }}{% endif %}
+<ul>{% for di in d.items %}<li>{{ di.menge|qty }} × {{ di.item.bezeichnung }}</li>{% endfor %}</ul></div>
+{% endfor %}
+{% endif %}
+{% endblock %}

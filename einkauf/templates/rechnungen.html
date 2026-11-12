@@ -1,0 +1,56 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf with context %}{% block title %}Rechnungen (ZUGFeRD){% endblock %}
+{% block content %}
+<div class="kopf"><h1>Lieferantenrechnungen (ZUGFeRD)</h1></div>
+
+{% if g.user.role != 'leser' %}
+<form method="post" enctype="multipart/form-data" class="panel">
+  {{ csrf() }}
+  <h3>ZUGFeRD-Rechnung einlesen</h3>
+  <p class="meta">Liest ZUGFeRD-/Factur-X-PDFs (mit eingebettetem XML) oder reine Rechnungs-XMLs ein und vergleicht die Nettosumme mit der zugeordneten Bestellung.</p>
+  <div class="grid3">
+    <label class="f"><span>PDF oder XML</span><input type="file" name="datei" required></label>
+    <label class="f"><span>Lieferant (optional)</span><select name="supplier_id">
+      <option value="">– automatisch / keiner –</option>
+      {% for l in lieferanten %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}
+    </select></label>
+    <label class="f"><span>Bestellung zuordnen (optional)</span><select name="order_id">
+      <option value="">– später zuordnen –</option>
+      {% for b in bestellungen %}<option value="{{ b.id }}">{{ b.bestelldatum|datum }} · {{ b.supplier.name }} · {{ b.bestellnr or ('Nr. ' ~ b.id) }} ({{ b.summe|money }})</option>{% endfor %}
+    </select></label>
+  </div>
+  <div class="actions"><button class="btn">Einlesen</button></div>
+</form>
+{% endif %}
+
+{% if rechnungen %}
+<div class="scroll"><table>
+  <thead><tr><th>Rechnungsnr.</th><th>Datum</th><th>Lieferant</th><th class="r">Netto</th><th class="r">Brutto</th><th>Bestellung</th><th>Abgleich</th></tr></thead>
+  <tbody>{% for r in rechnungen %}<tr>
+    <td>{{ r.rechnungsnr }}{% if r.dateiname %}<small class="sub">{{ r.dateiname }}</small>{% endif %}</td>
+    <td>{{ r.datum|datum }}</td>
+    <td>{{ r.supplier.name if r.supplier else (r.lieferant_name or '–') }}</td>
+    <td class="r">{{ r.netto|money if r.netto is not none else '–' }}</td>
+    <td class="r">{{ r.brutto|money if r.brutto is not none else '–' }}</td>
+    <td>
+      {% if g.user.role != 'leser' %}
+      <form method="post" action="{{ url_for('main.rechnung_zuordnen', rid=r.id) }}" style="display:flex; gap:.35rem; align-items:center">
+        {{ csrf() }}
+        <select name="order_id" onchange="this.form.submit()">
+          <option value="">– keine –</option>
+          {% for b in bestellungen %}<option value="{{ b.id }}" {{ 'selected' if r.order_id == b.id }}>{{ b.bestellnr or ('Nr. ' ~ b.id) }} ({{ b.summe|money }})</option>{% endfor %}
+        </select>
+      </form>
+      {% elif r.order %}{{ r.order.bestellnr or ('Nr. ' ~ r.order.id) }}{% else %}–{% endif %}
+    </td>
+    <td>
+      {% if r.status == 'geprueft' %}<span class="chip ok">passt</span>
+      {% elif r.status == 'abweichung' %}<span class="chip ueberfaellig">Abweichung (Bestellung {{ r.order.summe|money if r.order else '–' }})</span>
+      {% else %}<span class="chip bald">offen</span>{% endif %}
+    </td>
+  </tr>{% endfor %}</tbody>
+</table></div>
+{% else %}
+<p class="leer">Noch keine Lieferantenrechnungen eingelesen.</p>
+{% endif %}
+{% endblock %}
+

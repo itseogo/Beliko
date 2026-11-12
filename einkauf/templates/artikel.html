@@ -1,0 +1,29 @@
+{% extends 'base.html' %}{% block title %}Artikelstamm{% endblock %}
+{% block content %}
+<div class="kopf">
+  <h1>Artikelstamm ({{ gesamt }})</h1>
+  {% if g.user.role != 'leser' %}<a class="btn" href="{{ url_for('main.artikel_import') }}">Datanorm importieren</a>{% endif %}
+</div>
+
+<form method="get" class="leiste">
+  <label class="f"><span>Suchen</span><input name="q" value="{{ suche }}" placeholder="Artikelnr. oder Bezeichnung"></label>
+  <button class="btn sek">Filtern</button>
+</form>
+
+{% if artikel %}
+<div class="scroll"><table>
+  <thead><tr><th>Artikelnr.</th><th>Bezeichnung</th><th>Einheit</th><th class="r">Listenpreis</th><th>Rabattgr.</th><th>Lieferant</th></tr></thead>
+  <tbody>{% for a in artikel %}<tr>
+    <td>{{ a.artikelnr }}</td>
+    <td>{{ a.bezeichnung }}{% if a.kurztext2 %}<small class="sub">{{ a.kurztext2 }}</small>{% endif %}</td>
+    <td>{{ a.einheit or '–' }}</td>
+    <td class="r">{{ a.listenpreis|preis if a.listenpreis is not none else '–' }}</td>
+    <td>{{ a.rabattgruppe or '–' }}</td>
+    <td>{{ a.supplier.name if a.supplier else '–' }}</td>
+  </tr>{% endfor %}</tbody>
+</table></div>
+{% else %}
+<p class="leer">Noch keine Artikel im Stamm. Über „Datanorm importieren“ kannst du Artikeldaten (Datanorm 4/5) einlesen.</p>
+{% endif %}
+{% endblock %}
+

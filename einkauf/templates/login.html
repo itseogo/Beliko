@@ -1,0 +1,12 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf, field with context %}{% block title %}Anmelden{% endblock %}
+{% block content %}
+<form method="post" class="panel narrow">
+  <h1>BeLiKo</h1>
+  <p class="meta">BestellLieferKontrolle{% if firma %} · {{ firma }}{% endif %}</p>
+  {% if fehler %}<div class="flash fehler">{{ fehler }}</div>{% endif %}
+  {{ csrf() }}
+  {{ field('Benutzername', 'username', '', required=True, autofocus=True) }}
+  {{ field('Passwort', 'password', '', type='password', required=True) }}
+  <button class="btn">Anmelden</button>
+</form>
+{% endblock %}

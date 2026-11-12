@@ -1,0 +1,46 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf with context %}{% block title %}Aus Shop übernehmen{% endblock %}
+{% block content %}
+<h1>Warenkorb aus dem Shop übernehmen (IDS)</h1>
+<p class="meta">So kommt eine Bestellung aus dem Online-Shop des Lieferanten in die App: Du öffnest den Shop von hier aus (die Anmeldung geschieht automatisch), stellst deinen Warenkorb zusammen und wählst im Shop „Warenkorb übertragen“. Danach öffnet sich die App mit der fertig ausgefüllten Bestellung zum Prüfen. Gebucht wird erst, wenn du speicherst.</p>
+
+{% if offen %}
+<h2>Empfangene Warenkörbe</h2>
+<div class="scroll"><table><thead><tr><th>Lieferant</th><th>Empfangen</th><th></th></tr></thead><tbody>
+{% for o in offen %}<tr><td>{{ o.lieferant }}</td><td>{{ o.zeit }}</td><td><a class="btn sek" href="{{ url_for('main.bestellung_neu', ids=o.token) }}">Prüfen und als Bestellung speichern</a></td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+
+<h2>Shop öffnen</h2>
+{% set mit = lieferanten|selectattr('ids_url')|list %}
+{% if mit %}
+<div class="scroll"><table><thead><tr><th>Lieferant</th><th>Shop</th><th></th></tr></thead><tbody>
+{% for l in mit %}<tr><td>{{ l.name }}</td><td class="meta">{{ l.ids_url }}</td>
+<td class="aktionen"><form method="post" action="{{ url_for('main.ids_start', sid=l.id) }}" target="_blank">{{ csrf() }}<button class="btn">Shop öffnen</button></form>
+<form method="post" action="{{ url_for('main.ids_selbsttest', sid=l.id) }}">{{ csrf() }}<button class="btn sek" title="Schickt einen Testwarenkorb ohne den Shop an die App">Selbsttest</button></form></td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}
+<p class="leer">Noch kein Lieferant mit IDS-Zugang. {% if g.user.role == 'admin' %}Trage unter <a href="{{ url_for('main.lieferanten') }}">Einstellungen → Lieferanten</a> die IDS-Adresse, Kundennummer, Benutzername und Passwort ein.{% else %}Ein Admin kann das unter Einstellungen → Lieferanten eintragen.{% endif %}</p>
+{% endif %}
+
+<div class="panel hilfe">
+  <b>Im Shop fehlt der Button zum Übertragen?</b>
+  <ol class="liste">
+    <li><b>Die richtige IDS-Adresse.</b> Sie unterscheidet sich von der normalen Shop-Adresse (bei Fega z. B. <code>https://shop.fega.de/abtest/scripts/clsAIShop.php</code>, bei Löffelhardt <code>https://online.loeffelhardt.de/punchout/ids</code>). Schau im Kundenbereich des Shops nach „IDS Einstellungen“, frage den Lieferanten oder lies sie im Browser ab (F12 → Netzwerk, erste Anfrage beim Start aus der Branchensoftware). Der Verbindungstest zeigt, ob die Adresse als IDS-Zugang antwortet.</li>
+    <li><b>Zugangsdaten.</b> Manche Lieferanten vergeben für IDS einen eigenen Benutzer (oft mit der Endung „_ids“). Benutzername und Passwort stehen in deiner Branchensoftware beim Lieferanten unter IDS Connect.</li>
+    <li>Im Shop vorher abmelden oder den Shop aus einem <b>privaten Fenster</b> öffnen. Eine bestehende Anmeldung überdeckt oft den IDS-Aufruf.</li>
+    <li>Im Shop bis zur <b>letzten Seite (Bestellübersicht)</b> durchklicken. Der Button steht dort oft neben „Bestellen“, nicht im Warenkorb.</li>
+    <li>Unter Einstellungen → Lieferanten den <b>Verbindungstest</b> ausführen, er prüft Adresse, Version und Anmeldedaten.</li>
+    <li>Mit dem <b>Selbsttest</b> hier siehst du, ob die App einen Warenkorb annimmt. Klappt er, liegt es am Shop oder an den Einstellungen.</li>
+  </ol>
+</div>
+
+<div class="panel hilfe">
+  <b>Gut zu wissen</b>
+  <ul class="liste">
+    <li>Der Shop öffnet in einem neuen Tab. Nach „Warenkorb übertragen“ im Shop wird dieser Tab zur App.</li>
+    <li>Der Warenkorb wird über deinen Browser an die App geschickt. Der Browser muss die App erreichen können, also dieselbe Adresse, mit der du sie gerade aufgerufen hast.</li>
+    <li>Ruft die App per http:// auf und der Shop läuft mit https://, fragt der Browser vor dem Senden eventuell nach, ob die Daten an eine „unsichere“ Adresse gehen dürfen. Das ist dein eigenes Netz, du kannst es bestätigen.</li>
+    <li>Die Rückgabe gilt einmal und acht Stunden lang.</li>
+  </ul>
+</div>
+{% endblock %}

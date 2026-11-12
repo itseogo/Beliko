@@ -1,0 +1,54 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf, field with context %}{% block title %}{{ c.name }}{% endblock %}
+{% block content %}
+{% set bearbeiten = g.user.role != 'leser' and c.quelle != 'lexoffice' %}
+<p class="krumen"><a href="{{ url_for('main.kontakte') }}">← Zurück zu den Kontakten</a></p>
+<div class="kopf"><div><h1>{{ c.name }}</h1>
+  <p class="meta">{{ 'Firma' if c.typ == 'firma' else 'Privatperson' }} · {{ 'Kunde' if c.ist_kunde }}{{ ' · ' if c.ist_kunde and c.ist_lieferant }}{{ 'Lieferant' if c.ist_lieferant }} {{ '· ' ~ c.nummern if c.nummern }}{% if c.archiviert %} · <b>archiviert</b>{% endif %}</p></div>
+  {% if bearbeiten %}<div class="actions">
+    <a class="btn sek" href="{{ url_for('main.kontakt_bearbeiten', cid=c.id) }}">Bearbeiten</a>
+    <form method="post" action="{{ url_for('main.kontakt_archiv', cid=c.id) }}">{{ csrf() }}<button class="btn sek">{{ 'Wieder aktivieren' if c.archiviert else 'Archivieren' }}</button></form>
+  </div>{% endif %}</div>
+{% if c.quelle == 'lexoffice' %}<div class="flash">Aus Lexoffice synchronisiert{% if c.letzter_sync %} (Stand {{ c.letzter_sync.strftime('%d.%m.%Y %H:%M') }}){% endif %}. Änderungen bitte dort vornehmen.</div>{% endif %}
+
+<div class="grid2 daten">
+  <div class="panel"><h3>Adressen</h3>
+    <p><b>Rechnungsadresse</b><br>{% if c.re_strasse or c.re_ort %}{{ c.re_zusatz or '' }}{{ '<br>'|safe if c.re_zusatz }}{{ c.re_strasse or '' }}<br>{{ c.re_plz or '' }} {{ c.re_ort or '' }}{{ ' (' ~ c.re_land ~ ')' if c.re_land }}{% else %}<span class="meta">–</span>{% endif %}</p>
+    <p><b>Lieferadresse</b><br>{% if c.li_strasse or c.li_ort %}{{ c.li_zusatz or '' }}{{ '<br>'|safe if c.li_zusatz }}{{ c.li_strasse or '' }}<br>{{ c.li_plz or '' }} {{ c.li_ort or '' }}{{ ' (' ~ c.li_land ~ ')' if c.li_land }}{% else %}<span class="meta">–</span>{% endif %}</p></div>
+  <div class="panel"><h3>Erreichbarkeit</h3>
+    <table class="kv">
+    {% for t, w in [('E-Mail geschäftlich', c.email_geschaeft), ('E-Mail Büro', c.email_buero), ('E-Mail privat', c.email_privat), ('E-Mail sonstige', c.email_sonstige), ('Telefon geschäftlich', c.tel_geschaeft), ('Telefon Büro', c.tel_buero), ('Mobil', c.tel_mobil), ('Telefon privat', c.tel_privat), ('Fax', c.tel_fax), ('Telefon sonstige', c.tel_sonstige)] if w %}
+    <tr><th>{{ t }}</th><td>{{ w }}</td></tr>{% else %}<tr><td class="meta">Keine Angaben</td></tr>{% endfor %}
+    </table></div>
+  {% if c.typ == 'firma' and (c.steuernummer or c.ust_idnr or c.steuerfrei or c.leitweg_id or c.lieferantennr_beim_kunden) %}
+  <div class="panel"><h3>Steuer und Rechnung</h3><table class="kv">
+    {% if c.steuernummer %}<tr><th>Steuernummer</th><td>{{ c.steuernummer }}</td></tr>{% endif %}
+    {% if c.ust_idnr %}<tr><th>USt-IdNr.</th><td>{{ c.ust_idnr }}</td></tr>{% endif %}
+    {% if c.steuerfrei %}<tr><th>Steuerfreie Rechnungen</th><td>erlaubt</td></tr>{% endif %}
+    {% if c.leitweg_id %}<tr><th>Leitweg-ID (XRechnung)</th><td>{{ c.leitweg_id }}</td></tr>{% endif %}
+    {% if c.lieferantennr_beim_kunden %}<tr><th>Unsere Lieferantennr. dort</th><td>{{ c.lieferantennr_beim_kunden }}</td></tr>{% endif %}</table></div>{% endif %}
+  {% if c.typ == 'person' and c.anrede %}<div class="panel"><h3>Person</h3><p>{{ c.anrede }}</p></div>{% endif %}
+</div>
+{% if c.notiz %}<div class="panel"><h3>Notiz</h3><p>{{ c.notiz }}</p></div>{% endif %}
+
+{% if c.typ == 'firma' %}
+<h2>Ansprechpartner</h2>
+{% if c.personen %}
+<div class="scroll"><table><thead><tr><th>Name</th><th>E-Mail</th><th>Telefon</th><th></th><th></th></tr></thead><tbody>
+{% for p in c.personen %}<tr><td>{{ p.anrede or '' }} {{ p.vorname or '' }} {{ p.nachname or '' }}</td><td>{{ p.email or '' }}</td><td>{{ p.telefon or '' }}</td>
+<td>{% if p.primaer %}<span class="chip ok">Hauptansprechpartner</span>{% endif %}</td>
+<td>{% if bearbeiten %}<form method="post" action="{{ url_for('main.kontakt_person_loeschen', cid=c.id, pid=p.id) }}" onsubmit="return confirm('Ansprechpartner entfernen?')">{{ csrf() }}<button class="link-b">Entfernen</button></form>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<p class="leer">Noch keine Ansprechpartner.</p>{% endif %}
+{% if bearbeiten %}
+<form method="post" action="{{ url_for('main.kontakt_person_neu', cid=c.id) }}" class="panel">
+  <h3>Ansprechpartner hinzufügen</h3>{{ csrf() }}
+  <div class="grid4">{{ field('Anrede', 'anrede', '') }}{{ field('Vorname', 'vorname', '') }}{{ field('Nachname', 'nachname', '') }}{{ field('E-Mail', 'email', '', type='email') }}{{ field('Telefon', 'telefon', '') }}</div>
+  <label class="check"><input type="checkbox" name="primaer" value="1"> Hauptansprechpartner</label>
+  <button class="btn sek">Hinzufügen</button>
+</form>{% endif %}
+{% endif %}
+
+<h2>Projekte mit diesem Kunden</h2>
+{% if projekte %}<ul class="liste">{% for p in projekte %}<li><a href="{{ url_for('main.projekte', p=p.id, status='alle') }}">{{ p.nummer }} · {{ p.name }}</a></li>{% endfor %}</ul>
+{% else %}<p class="meta">Noch keinem Projekt zugeordnet.</p>{% endif %}
+{% endblock %}

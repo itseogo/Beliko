@@ -1,0 +1,44 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf, field with context %}{% block title %}Lieferschein erfassen{% endblock %}
+{% block content %}
+<h1>Lieferschein erfassen</h1>
+<p class="meta">Wähle den Lieferanten. Dann siehst du alle noch offenen Positionen seiner bestellten Bestellungen und trägst ein, was geliefert wurde. Eine Datei des Lieferanten (UGL) liest du in der jeweiligen Bestellung ein.</p>
+{% if fehler %}<div class="flash fehler">{{ fehler }}</div>{% endif %}
+
+<form method="get" class="leiste">
+  <label class="f"><span>Lieferant *</span><select name="lieferant" onchange="this.form.submit()" required>
+    <option value="">Bitte wählen</option>
+    {% for l in lieferanten %}<option value="{{ l.id }}" {{ 'selected' if sid == l.id }}>{{ l.name }}</option>{% endfor %}</select></label>
+  <noscript><button class="btn sek">Anzeigen</button></noscript>
+</form>
+
+{% if sid %}
+{% if offene %}
+<form method="post" class="maske">
+  {{ csrf() }}<input type="hidden" name="lieferant" value="{{ sid }}">
+  <div class="panel">
+    <div class="grid4">
+      {{ field('Lieferschein-Nr.', 'lieferschein_nr', form.get('lieferschein_nr', '')) }}
+      {{ field('Lieferdatum', 'datum', form.get('datum') or heute.isoformat(), type='date') }}
+      {{ field('Notiz', 'notiz', form.get('notiz', '')) }}
+    </div>
+  </div>
+  {% for o, pos in offene %}
+  <h3 class="gruppe">Bestellung {{ o.bestellnr or ('Nr. ' ~ o.id) }} <small>vom {{ o.bestelldatum|datum }}{% if o.ab_nr %} · AB {{ o.ab_nr }}{% endif %}</small></h3>
+  <div class="scroll"><table class="zeilen">
+    <thead><tr><th>Artikel</th><th>Projekt</th><th class="r">Bestellt</th><th class="r">Schon geliefert</th><th class="r">Offen</th><th class="r">Jetzt geliefert</th></tr></thead>
+    <tbody>{% for i in pos %}<tr class="{{ i.faellig }}">
+      <td>{{ i.bezeichnung }}{% if i.artikelnr %}<small class="sub">{{ i.artikelnr }}</small>{% endif %}{% if i.kommission %}<small class="sub">Kommission: {{ i.kommission }}</small>{% endif %}{% if i.hinweis %}<small class="sub hinweis">{{ i.hinweis }}</small>{% endif %}</td>
+      <td>{{ i.project.nummer if i.project else '–' }}</td>
+      <td class="r">{{ i.menge|qty }} {{ i.einheit or '' }}</td><td class="r">{{ i.geliefert|qty }}</td><td class="r"><b>{{ i.rest|qty }}</b></td>
+      <td class="r"><input name="menge_{{ i.id }}" value="{{ form.get('menge_' ~ i.id, '') }}" inputmode="decimal" placeholder="0" class="kurz"></td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% endfor %}
+  <div class="actions aktionsleiste">
+    <button class="btn">Lieferschein buchen</button>
+    <button class="btn sek" name="alles" value="1" onclick="return confirm('Alle offenen Mengen dieses Lieferanten als geliefert buchen?')">Alles als geliefert buchen</button>
+    <a class="btn sek" href="{{ url_for('main.lieferscheine') }}">Abbrechen</a>
+  </div>
+</form>
+{% else %}<p class="leer">Dieser Lieferant hat keine offenen Positionen in bestellten Bestellungen. Steht eine Bestellung noch auf „Neu“, markiere sie zuerst als bestellt.</p>{% endif %}
+{% endif %}
+{% endblock %}

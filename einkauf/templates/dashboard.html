@@ -1,0 +1,40 @@
+{% extends 'base.html' %}{% block title %}Übersicht{% endblock %}
+{% block content %}
+<h1>Übersicht</h1>
+<div class="kpis">
+  <a class="kpi {{ 'rot' if ueberfaellig }}" href="{{ url_for('main.rueckstand', gruppe='datum') }}"><b>{{ ueberfaellig|length }}</b><span>überfällige Positionen</span></a>
+  <a class="kpi" href="{{ url_for('main.rueckstand', gruppe='datum') }}"><b>{{ woche|length }}</b><span>Lieferungen in 7 Tagen erwartet</span></a>
+  <a class="kpi" href="{{ url_for('main.rueckstand') }}"><b>{{ offen|length }}</b><span>Positionen im Rückstand</span></a>
+  <a class="kpi" href="{{ url_for('main.bestellungen', status='neu') }}"><b>{{ neu }}</b><span>Bestellungen noch nicht bestellt (Neu)</span></a>
+  <a class="kpi {{ 'rot' if dateien_neu }}" href="{{ url_for('main.dateien') }}"><b>{{ dateien_neu }}</b><span>neue Lieferantendateien</span></a>
+  <a class="kpi" href="{{ url_for('main.projekte') }}"><b>{{ projekte }}</b><span>aktive Projekte</span></a>
+</div>
+{% if hinweise.unklar_lex or hinweise.rechnungen_offen or hinweise.sperren_aktiv %}
+<div class="flash warn">
+  <b>Hinweise:</b>
+  {% if hinweise.unklar_lex %}<a href="{{ url_for('main.lex_belege') }}">{{ hinweise.unklar_lex }} unklare Lexoffice-Position(en)</a>{% endif %}
+  {% if hinweise.rechnungen_offen %}{% if hinweise.unklar_lex %} · {% endif %}<a href="{{ url_for('main.rechnungen') }}">{{ hinweise.rechnungen_offen }} offene Rechnung(en)</a>{% endif %}
+  {% if hinweise.sperren_aktiv %}{% if hinweise.unklar_lex or hinweise.rechnungen_offen %} · {% endif %}{{ hinweise.sperren_aktiv }} aktive Bearbeitungssperre(n){% endif %}
+</div>
+{% endif %}
+<h2>Als Nächstes erwartet</h2>
+{% if offen %}
+<div class="scroll"><table>
+<thead><tr><th>Voraussichtlich</th><th>Artikel</th><th class="r">Rest</th><th>Lieferant</th><th>Projekt</th></tr></thead>
+<tbody>
+{% for i in offen[:12] %}
+<tr class="{{ i.faellig }}">
+  <td>{{ i.erw_lieferdatum|datum or 'kein Termin' }}</td>
+  <td><a href="{{ url_for('main.bestellung_detail', oid=i.order_id) }}">{{ i.bezeichnung }}</a></td>
+  <td class="r">{{ i.rest|qty }} {{ i.einheit or '' }}</td>
+  <td>{{ i.order.supplier.name }}</td>
+  <td>{{ (i.project.nummer ~ ' ' ~ i.project.name) if i.project else '–' }}</td>
+</tr>
+{% endfor %}
+</tbody></table></div>
+{% if offen|length > 12 %}<p><a href="{{ url_for('main.rueckstand', gruppe='datum') }}">Alle {{ offen|length }} Positionen im Rückstand ansehen</a></p>{% endif %}
+{% else %}
+<p class="leer">Kein Rückstand. Sobald Bestellungen mit offenen Positionen existieren, erscheinen sie hier.</p>
+{% if g.user.role != 'leser' %}<p class="meta">Mit „Neu“ oben legst du eine Bestellung an oder übernimmst einen Warenkorb aus dem Shop.</p>{% endif %}
+{% endif %}
+{% endblock %}

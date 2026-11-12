@@ -1,0 +1,12 @@
+{% extends 'base.html' %}{% block title %}Verbindung testen{% endblock %}
+{% block content %}
+<p class="krumen"><a href="{{ url_for('main.lieferant_bearbeiten', sid=s.id) }}">← Zurück zum Lieferanten</a></p>
+<h1>Abruf testen: {{ s.name }}</h1>
+<p class="meta">{{ (s.ugl_verfahren or '')|upper }}{% if s.ugl_server %} · {{ s.ugl_server }}{% if s.ugl_port %}:{{ s.ugl_port }}{% endif %}{% endif %} · Ordner {{ s.ugl_pfad_ausgang or '–' }}. Der Test liest nur die Dateiliste, es wird nichts heruntergeladen oder verändert.</p>
+{% if fehler %}<div class="flash fehler"><b>Verbindung nicht möglich.</b> {{ fehler }}</div>
+{% else %}
+<div class="flash ok"><b>Verbindung in Ordnung.</b> Im Ordner liegen {{ ergebnis.alle }} Dateien{% if ergebnis.ungueltig %}, davon {{ ergebnis.ungueltig }} mit einem Namen, den die App aus Sicherheitsgründen überspringt{% endif %}.</div>
+{% if ergebnis.namen %}<div class="panel"><h3>Dateien (bis zu 30 angezeigt)</h3><ul class="liste">{% for n in ergebnis.namen[:30] %}<li><code>{{ n }}</code></li>{% endfor %}</ul></div>
+{% else %}<p class="leer">Der Ordner ist leer.</p>{% endif %}
+{% endif %}
+{% endblock %}

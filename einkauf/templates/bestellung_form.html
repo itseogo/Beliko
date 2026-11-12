@@ -1,0 +1,95 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf, field, area with context %}{% block title %}Bestellung erfassen{% endblock %}
+{% macro zeile(z) %}
+<tr class="zeile">
+  <td><input name="row_artikelnr" value="{{ z.artikelnr }}" aria-label="Artikelnummer"></td>
+  <td><input name="row_bezeichnung" value="{{ z.bezeichnung }}" aria-label="Bezeichnung">{% if z.hinweis %}<small class="sub hinweis">{{ z.hinweis }}</small>{% endif %}<input type="hidden" name="row_hinweis" value="{{ z.hinweis }}"></td>
+  <td><input name="row_menge" value="{{ z.menge }}" inputmode="decimal" class="r" aria-label="Menge"></td>
+  <td><input name="row_einheit" value="{{ z.einheit }}" aria-label="Einheit"></td>
+  <td><input name="row_preis" value="{{ z.preis }}" inputmode="decimal" class="r" aria-label="Einzelpreis netto"></td>
+  <td><input type="date" name="row_termin" value="{{ z.termin }}" aria-label="Voraussichtlich geliefert"></td>
+  <td><select name="row_projekt" aria-label="Projekt"><option value="">wie oben</option><option value="-" {{ 'selected' if z.projekt == '-' }}>Ohne Projekt</option>
+    {% for p in projekte %}<option value="{{ p.id }}" {{ 'selected' if z.projekt == p.id|string }}>{{ p.nummer }} {{ p.name }}</option>{% endfor %}</select></td>
+  <td><input name="row_kommission" value="{{ z.kommission }}" aria-label="Kommission"></td>
+  <td><button type="button" class="link-b entf" title="Zeile entfernen" aria-label="Zeile entfernen">✕</button></td>
+</tr>
+{% endmacro %}
+{% block content %}
+<form method="post" class="maske" id="bestellform">
+  <h1>Bestellung erfassen</h1>
+  {% if fehler %}<div class="flash fehler">{{ fehler }}</div>{% endif %}
+  {% if not lieferanten %}<div class="flash warn">Es gibt noch keinen Lieferanten. {% if g.user.role == 'admin' %}<a href="{{ url_for('main.lieferant_neu') }}">Lieferant anlegen</a>{% else %}Bitte einen Admin bitten, einen Lieferanten anzulegen.{% endif %}</div>{% endif %}
+  {% if ids_info %}
+  <div class="flash ok"><b>Warenkorb aus dem Shop{% if ids_info.lieferant %} von {{ ids_info.lieferant }}{% endif %}.</b>
+    {{ ids_info.anzahl }} Positionen übernommen{% if ids_info.rueckgabe %} · Rückgabe: {{ ids_info.rueckgabe }}{% endif %}.
+    Prüfe Mengen und Preise, ordne das Projekt zu und speichere.
+    {% if ids_info.lieferdatum %}Liefertermin laut Shop: {{ ids_info.lieferdatum|datum }}{% if ids_info.lieferwoche %} (Lieferwoche {{ ids_info.lieferwoche[1] }}/{{ ids_info.lieferwoche[0] }}, eingetragen ist der Freitag){% endif %}.{% endif %}</div>
+  {% if ids_info.mit_bestellung %}<div class="flash warn">Der Shop meldet eine Rückgabe <b>mit Bestellung</b>, die Bestellung ist dort also schon ausgelöst. Der Haken „Schon beim Lieferanten bestellt“ ist deshalb gesetzt.</div>{% endif %}
+  {% if ids_info.doppelt %}<div class="flash warn">Eine Bestellung mit dieser Auftragsbestätigungsnummer gibt es schon: <a href="{{ url_for('main.bestellung_detail', oid=ids_info.doppelt.id) }}">Bestellung {{ ids_info.doppelt.bestellnr or ids_info.doppelt.id }}</a>. Prüfe, dass du nichts doppelt anlegst.</div>{% endif %}
+  {% if ids_info.ohne_preis %}<div class="flash warn">{{ ids_info.ohne_preis }} Positionen kamen ohne Nettopreis aus dem Shop. Sie haben deshalb keinen Preis.</div>{% endif %}
+  {% if ids_info.anzahl %}<div class="flash">Einzelpreise sind aus dem Nettopreis des Shops berechnet, der laut Einstellung des Lieferanten für {{ 'die ganze Menge' if ids_info.modus == 'gesamt' else 'eine Einheit' }} gilt. Stimmen sie nicht, ändere die Einstellung beim Lieferanten.</div>{% endif %}
+  {% if ids_info.uebersprungen %}<div class="flash warn">Nicht übernommen (Alternativ- oder Bedarfspositionen): {% for p in ids_info.uebersprungen %}{{ p.kurztext or p.artikelnr }} ({{ p.artikelnr }}){{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}
+  {% for w in ids_info.warnungen %}<div class="flash warn">{{ w }}</div>{% endfor %}
+  {% endif %}
+  {{ csrf() }}
+  {% if ids_token %}<input type="hidden" name="ids_token" value="{{ ids_token }}">{% endif %}
+
+  <div class="panel">
+    <h3>Kopf</h3>
+    <div class="grid4">
+      <label class="f"><span>Lieferant *</span><select name="supplier_id" required>
+        <option value="">Bitte wählen</option>
+        {% for l in lieferanten %}<option value="{{ l.id }}" {{ 'selected' if werte.supplier_id|string == l.id|string }}>{{ l.name }}</option>{% endfor %}</select></label>
+      {{ field('Bestelldatum', 'bestelldatum', werte.bestelldatum, type='date') }}
+      {{ field('Bestellnummer', 'bestellnr', werte.bestellnr, hint='Vorschlag aus dem Nummernkreis, zum Ändern einfach überschreiben.') }}
+      {{ field('Auftragsbestätigung (AB-Nr.)', 'ab_nr', werte.ab_nr) }}
+      {{ field('Wunschtermin', 'wunschtermin', werte.wunschtermin, type='date') }}
+      <label class="f"><span>Projekt für alle Positionen</span><select name="projekt_alle">
+        <option value="">kein Projekt</option>
+        {% for p in projekte %}<option value="{{ p.id }}" {{ 'selected' if werte.projekt_alle|string == p.id|string }}>{{ p.nummer }} {{ p.name }}</option>{% endfor %}</select>
+        <small>In den Zeilen kannst du pro Position ein anderes wählen.</small></label>
+    </div>
+    {{ area('Notiz', 'notiz', werte.notiz) }}
+    <label class="check"><input type="checkbox" name="schon_bestellt" value="1" {{ 'checked' if werte.schon_bestellt }}> Schon beim Lieferanten bestellt (sonst bleibt sie im Ordner „Neu“)</label>
+  </div>
+
+  <h2>Positionen</h2>
+  <div class="scroll"><table class="zeilen">
+    <thead><tr><th>Artikelnr.</th><th>Bezeichnung</th><th class="r">Menge</th><th>Einheit</th><th class="r">Einzelpreis netto</th><th>Voraussichtlich</th><th>Projekt</th><th>Kommission</th><th></th></tr></thead>
+    <tbody id="zeilen">{% for z in zeilen %}{{ zeile(z) }}{% endfor %}</tbody>
+  </table></div>
+  <template id="vorlage">{{ zeile({'artikelnr': '', 'bezeichnung': '', 'menge': '', 'einheit': 'Stück', 'preis': '', 'termin': '', 'projekt': '', 'kommission': '', 'hinweis': ''}) }}</template>
+  <p class="meta">Leere Zeilen werden ignoriert. Positionen kannst du auch später in der Bestellung ergänzen.</p>
+  <div class="actions">
+    <button type="button" class="btn sek" id="zeile-neu">+ Zeile</button>
+  </div>
+  <div class="actions aktionsleiste">
+    <button class="btn">Bestellung speichern</button>
+    <a class="btn sek" href="{{ url_for('main.bestellungen') }}">Abbrechen</a>
+  </div>
+</form>
+<script>
+(function () {
+  var tb = document.getElementById('zeilen'), vorlage = document.getElementById('vorlage');
+  function neueZeile() {
+    var z = vorlage.content.firstElementChild.cloneNode(true);
+    tb.appendChild(z);
+    return z;
+  }
+  document.getElementById('zeile-neu').addEventListener('click', function () { neueZeile().querySelector('input').focus(); });
+  tb.addEventListener('click', function (e) {
+    var b = e.target.closest('.entf'); if (!b) return;
+    var z = b.closest('tr');
+    if (tb.children.length > 1) { z.remove(); }
+    else { z.querySelectorAll('input:not([type=hidden])').forEach(function (i) { i.value = i.name === 'row_einheit' ? 'Stück' : ''; }); }
+  });
+  // Enter im letzten Feld der letzten Zeile legt eine neue Zeile an, statt das Formular abzuschicken
+  tb.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' || e.target.tagName === 'BUTTON') return;
+    e.preventDefault();
+    var z = e.target.closest('tr'), weiter = z.nextElementSibling || neueZeile();
+    var feld = weiter.querySelector('[name="' + e.target.name + '"]');
+    if (feld) feld.focus();
+  });
+})();
+</script>
+{% endblock %}

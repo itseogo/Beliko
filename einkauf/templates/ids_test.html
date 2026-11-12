@@ -1,0 +1,56 @@
+{% extends 'base.html' %}{% block title %}IDS-Verbindung testen{% endblock %}
+{% block content %}
+<p class="krumen"><a href="{{ url_for('main.lieferant_bearbeiten', sid=s.id) }}">← Zurück zum Lieferanten</a></p>
+<h1>IDS-Verbindung testen: {{ s.name }}</h1>
+<p class="meta">Die App fragt den Shop von hier aus (vom Pi, nicht vom Browser) nach den unterstützten Versionen und den nötigen Anmeldedaten. Das öffnet keinen Warenkorb und ändert nichts.</p>
+
+{% if ist_ids %}
+<div class="flash ok"><b>Die Adresse verhält sich wie ein IDS-Zugang.</b></div>
+{% else %}
+<div class="flash fehler"><b>Keine IDS-Antwort erhalten.</b> Entweder ist die Adresse nicht die IDS-Adresse des Shops, oder der Shop beantwortet diese Abfragen nicht. Das ist noch kein Beweis, dass IDS gar nicht geht, aber ein Hinweis, die Adresse beim Lieferanten nachzufragen.</div>
+{% endif %}
+
+{% if versionen %}
+  {% if version and version not in versionen %}<div class="flash warn">Der Shop unterstützt laut Antwort nur die Versionen <b>{{ versionen|join(', ') }}</b>, eingestellt ist <b>{{ version }}</b>. Stelle beim Lieferanten eine unterstützte Version ein.</div>
+  {% elif not version %}<div class="flash">Der Shop unterstützt die Versionen {{ versionen|join(', ') }}. Eingestellt ist „nicht senden“.</div>
+  {% else %}<div class="flash ok">Eingestellte Version <b>{{ version }}</b> wird vom Shop unterstützt (er nennt: {{ versionen|join(', ') }}).</div>{% endif %}
+{% endif %}
+{% if login %}
+<div class="flash">Der Shop verlangt: Kundennummer <b>{{ 'ja' if login.get('Kundennummer_erforderlich') else 'nein' }}</b>, Benutzername <b>{{ 'ja' if login.get('Benutzername_erforderlich') else 'nein' }}</b>, Passwort <b>{{ 'ja' if login.get('Passwort_erforderlich') else 'nein' }}</b>.
+  {% if login.get('Kundennummer_erforderlich') and not s.ids_kndnr %}<br><b>Es fehlt die Kundennummer in den Einstellungen.</b>{% endif %}
+  {% if login.get('Benutzername_erforderlich') and not s.ids_benutzer %}<br><b>Es fehlt der Benutzername.</b>{% endif %}
+  {% if login.get('Passwort_erforderlich') and not s.ids_passwort_enc %}<br><b>Es fehlt das Passwort.</b>{% endif %}</div>
+{% endif %}
+
+{% for e in ergebnisse %}
+<div class="panel">
+  <h3>{{ e.titel }}</h3>
+  {% set a = e.antwort %}{% set dt = e.deutung %}
+  <p class="meta">Antwort: {% if a.fehler %}<b>{{ a.fehler }}</b>{% else %}HTTP {{ a.status }}, Typ {{ a.typ or 'unbekannt' }}{% if a.url != s.ids_url %}, weitergeleitet nach {{ a.url }}{% endif %}{% endif %}</p>
+  {% if dt.art == 'versionen' %}<p>Versionen: <b>{{ dt.werte|join(', ') }}</b></p>
+  {% elif dt.art == 'login' %}<p>Anmeldedaten laut Shop: {% for k, w in dt.werte.items() %}{{ k.replace('_erforderlich', '') }}: {{ 'ja' if w else 'nein' }}{{ ', ' if not loop.last }}{% endfor %}</p>
+  {% elif dt.art == 'html' %}<p><b>Der Shop antwortet mit einer normalen Webseite, nicht mit einer IDS-Antwort.</b> Anfang der Seite: <span class="meta">{{ dt.text }}</span></p>
+  {% elif dt.art == 'netzwerk' %}<p>Verbindung nicht möglich. Ist der Pi im Internet, und stimmt die Adresse?</p>
+  {% else %}<pre class="detail">{{ dt.text }}</pre>{% endif %}
+</div>
+{% endfor %}
+
+<div class="panel">
+  <h3>Das schickt die App beim Öffnen des Shops</h3>
+  <p class="meta">Aufruf per <b>{{ 'Adresszeile (GET)' if s.ids_aufruf == 'get' else 'Formular (POST)' }}</b> an {{ s.ids_url }}. Vergleiche das mit der IDS-Beschreibung des Lieferanten (Parameternamen, Version).</p>
+  <table class="kv">{% for n, w in gesendet %}<tr><th><code>{{ n }}</code></th><td>{{ w }}</td></tr>{% endfor %}</table>
+</div>
+
+<div class="panel hilfe">
+  <b>Wenn im Shop der Button zum Übertragen fehlt, prüfe in dieser Reihenfolge</b>
+  <ol class="liste">
+    <li><b>Die richtige IDS-Adresse.</b> Sie unterscheidet sich von der normalen Shop-Adresse (bei Fega z. B. <code>https://shop.fega.de/abtest/scripts/clsAIShop.php</code>, bei Löffelhardt <code>https://online.loeffelhardt.de/punchout/ids</code>). Schau im Kundenbereich des Shops nach „IDS Einstellungen“, frage den Lieferanten oder lies sie im Browser ab (F12 → Netzwerk, erste Anfrage beim Start aus der Branchensoftware). Der Verbindungstest zeigt, ob die Adresse als IDS-Zugang antwortet.</li>
+    <li><b>Zugangsdaten.</b> Manche Lieferanten vergeben für IDS einen eigenen Benutzer (oft mit der Endung „_ids“). Benutzername und Passwort stehen in deiner Branchensoftware beim Lieferanten unter IDS Connect.</li>
+    <li><b>Ohne alte Sitzung öffnen.</b> Warst du im Shop schon angemeldet, übernimmt er den IDS-Aufruf oft nicht. Im Shop abmelden oder den Shop aus einem privaten Fenster öffnen (Adresse der App dort aufrufen).</li>
+    <li><b>Bis zum Ende durchklicken.</b> Bei vielen Shops steht der Button nicht im Warenkorb, sondern auf der letzten Seite (Bestellübersicht), neben dem Knopf zum Bestellen. Dort nicht „Bestellen“ wählen, sondern den Button zum Übertragen an das Handwerkerprogramm.</li>
+    <li><b>Version.</b> Stimmt die Version mit der Liste oben überein?</li>
+    <li><b>Aufrufart.</b> Manche Shops lesen die Angaben nur aus der Adresszeile. Stelle beim Lieferanten „Adresszeile (GET)“ ein und probiere es nochmals.</li>
+    <li><b>Rückgabe-Adresse.</b> Der Shop zeigt den Button nur, wenn er die Rückgabe-Adresse annimmt. Manche verlangen https://. Das siehst du daran, dass alles andere stimmt und der Button trotzdem fehlt. Frage dann beim Lieferanten nach.</li>
+  </ol>
+</div>
+{% endblock %}

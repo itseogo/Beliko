@@ -1,0 +1,4 @@
+{% extends 'base.html' %}{% block title %}Datenbank nicht erreichbar{% endblock %}
+{% block content %}<div class="panel narrow"><h1>Datenbank nicht erreichbar</h1>
+<p>Die Verbindung zu MariaDB ist fehlgeschlagen. Ist das NAS eingeschaltet und die Datenbank gestartet? Diese Seite lädt nach dem Aktualisieren neu.</p>
+<pre class="detail">{{ error }}</pre></div>{% endblock %}

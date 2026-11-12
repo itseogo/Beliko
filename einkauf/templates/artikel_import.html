@@ -1,0 +1,18 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf with context %}{% block title %}Datanorm importieren{% endblock %}
+{% block content %}
+<p class="krumen"><a href="{{ url_for('main.artikel') }}">← Zurück zum Artikelstamm</a></p>
+<form method="post" enctype="multipart/form-data" class="panel">
+  <h1>Datanorm importieren</h1>
+  <p class="meta">Liest Datanorm-Textdateien (Version 4 oder 5, Semikolon-getrennt, Satzarten A und P) ein und aktualisiert den Artikelstamm.</p>
+  {{ csrf() }}
+  <div class="grid2">
+    <label class="f"><span>Datanorm-Datei</span><input type="file" name="datei" required></label>
+    <label class="f"><span>Lieferant (optional)</span><select name="supplier_id">
+      <option value="">– keiner –</option>
+      {% for l in lieferanten %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}
+    </select></label>
+  </div>
+  <div class="actions"><button class="btn">Importieren</button><a class="btn sek" href="{{ url_for('main.artikel') }}">Abbrechen</a></div>
+</form>
+{% endblock %}
+

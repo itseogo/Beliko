@@ -1,0 +1,114 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf with context %}{% block title %}{{ BELEG_TYPEN.get(doc.typ, doc.typ) }} {{ doc.nummer or doc.id }}{% endblock %}
+{% block content %}
+<div class="kopf">
+  <div>
+    <h1>{{ BELEG_TYPEN.get(doc.typ, doc.typ) }} {{ doc.nummer or ('#' ~ doc.id) }}</h1>
+    <p class="meta">
+      Datum: {{ doc.datum|datum }} · Status: {{ BELEG_STATUS.get(doc.status, doc.status or '–') }}
+      · Kunde: {% if doc.contact_id %}<a href="{{ url_for('main.kontakt_detail', cid=doc.contact_id) }}">{{ doc.kunde_name or '–' }}</a>{% else %}{{ doc.kunde_name or '–' }}{% endif %}
+      {% if doc.titel %} · {{ doc.titel }}{% endif %}
+    </p>
+  </div>
+  <div class="actions">
+    {% if von %}<a class="btn sek" href="{{ url_for('main.projekte', p=von, tab='lexoffice', status='alle') }}">Zurück zum Projekt</a>{% endif %}
+    <a class="btn sek" href="{{ url_for('main.lex_belege') }}">Alle Belege</a>
+  </div>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><b>{{ doc.netto|money if doc.netto is not none else '–' }}</b><span>Gesamt (netto)</span></div>
+  <div class="kpi"><b>{{ doc.brutto|money if doc.brutto is not none else '–' }}</b><span>Gesamt (brutto)</span></div>
+  <div class="kpi"><b>{{ doc.materialwert|money }}</b><span>Materialwert (aus Kostenarten)</span></div>
+  <div class="kpi {{ 'rot' if doc.unklar_anzahl else '' }}"><b>{{ doc.unklar_anzahl }}</b><span>Positionen „unklar“</span></div>
+</div>
+
+{% if gesperrt_von %}
+<div class="flash fehler">
+  {{ sperre_text }}
+  {% if g.user.role == 'admin' %}
+  <form method="post" action="{{ url_for('main.sperre_freigeben', obj_typ='lex_beleg', obj_id=doc.id) }}" style="display:inline; margin-left:.5rem">
+    {{ csrf() }}<button class="btn sek">Sperre aufheben</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+{% if doc.unklar_anzahl %}
+<div class="flash warn">{{ doc.unklar_anzahl }} Position(en) haben noch keine Kostenart und zählen deshalb nicht zum Materialwert. Bitte wähle unten jeweils die Kostenart aus.</div>
+{% endif %}
+
+<form method="post" class="panel">
+  {{ csrf() }}
+  <input type="hidden" name="version" value="{{ doc.version or 1 }}">
+  <div class="leiste" style="margin-bottom:1rem">
+    <label class="f" style="min-width:20rem"><span>Zugeordnetes Projekt</span>
+      <select name="project_id" {{ 'disabled' if g.user.role == 'leser' }}>
+        <option value="">– kein Projekt –</option>
+        {% for pr in projekte %}<option value="{{ pr.id }}" {{ 'selected' if doc.project_id == pr.id }}>{{ pr.nummer }} · {{ pr.name }}{% if pr.kunde %} ({{ pr.kunde }}){% endif %}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+
+  {% if doc.items %}
+  <div class="scroll"><table>
+    <thead><tr><th>Pos</th><th>Bezeichnung</th><th class="r">Menge</th><th class="r">EP (netto)</th><th class="r">Gesamt (netto)</th><th>Kostenart</th><th class="r">Anteil %</th><th class="r">Materialwert</th></tr></thead>
+    <tbody>{% for i in doc.items %}
+    <tr class="{{ 'bald' if i.ist_unklar else '' }}">
+      <td>{{ i.position }}</td>
+      <td>
+        {{ i.bezeichnung }}
+        {% if i.lex_typ %}<small class="sub">Lexoffice-Typ: {{ i.lex_typ }}</small>{% endif %}
+        {% if i.beschreibung %}<small class="sub">{{ i.beschreibung[:120] }}{% if i.beschreibung|length > 120 %}…{% endif %}</small>{% endif %}
+      </td>
+      <td class="r">{{ (i.menge|qty ~ ' ' ~ (i.einheit or '')) if i.menge is not none else '–' }}</td>
+      <td class="r">{{ i.einzelpreis_netto|preis if i.einzelpreis_netto is not none else '–' }}</td>
+      <td class="r">{{ i.gesamt_netto|money if i.gesamt_netto is not none else '–' }}</td>
+      <td>
+        {% if i.lex_typ == 'text' %}
+          <span class="meta">Textzeile</span>
+        {% else %}
+          <select name="ka_{{ i.id }}" data-anteil="anteil_{{ i.id }}" onchange="toggleAnteil(this)" {{ 'disabled' if g.user.role == 'leser' }}>
+            {% for k, t in KOSTENARTEN.items() %}<option value="{{ k }}" {{ 'selected' if (i.kostenart or '') == k }}>{{ t }}</option>{% endfor %}
+          </select>
+        {% endif %}
+      </td>
+      <td class="r">
+        {% if i.lex_typ != 'text' %}
+          <input type="text" inputmode="decimal" id="anteil_{{ i.id }}" name="anteil_{{ i.id }}" value="{{ (i.materialanteil if i.materialanteil is not none else 100)|qty }}" style="width:4.5rem; text-align:right; {{ '' if i.kostenart == 'pauschale' else 'display:none' }}" {{ 'disabled' if g.user.role == 'leser' }}>
+          {% if i.kostenart != 'pauschale' %}<span class="meta" id="txt_anteil_{{ i.id }}">{% if i.kostenart == 'material' %}100 %{% elif i.kostenart in ('fremdleistung', 'arbeit') %}0 %{% else %}–{% endif %}</span>{% endif %}
+        {% endif %}
+      </td>
+      <td class="r">{{ i.materialwert|money if i.lex_typ != 'text' else '–' }}</td>
+    </tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="leer">Dieser Beleg enthält keine Positionen.</p>{% endif %}
+
+  {% if g.user.role != 'leser' and not gesperrt_von %}
+  <div style="margin-top:1rem">
+    <label class="check"><input type="checkbox" name="merken" value="1" checked> Gewählte Kostenarten pro Lexoffice-Artikel für künftige Belege und offene Positionen merken</label>
+    <div class="actions" style="margin-top:.5rem"><button class="btn">Speichern</button></div>
+  </div>
+  {% endif %}
+</form>
+
+<script>
+function toggleAnteil(sel) {
+  var id = sel.getAttribute('data-anteil');
+  var inp = document.getElementById(id);
+  var txt = document.getElementById('txt_' + id);
+  if (!inp) return;
+  if (sel.value === 'pauschale') {
+    inp.style.display = '';
+    if (!inp.value || inp.value === '100' || inp.value === '0') inp.value = '50';
+    if (txt) txt.style.display = 'none';
+  } else {
+    inp.style.display = 'none';
+    if (txt) {
+      txt.style.display = '';
+      txt.textContent = sel.value === 'material' ? '100 %' : (sel.value ? '0 %' : '–');
+    }
+  }
+}
+</script>
+{% endblock %}
+

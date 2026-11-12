@@ -1,0 +1,22 @@
+{% extends 'base.html' %}{% block title %}Bestellungen{% endblock %}
+{% block content %}
+<div class="kopf"><div>
+  <p class="krumen">Bestellwesen › <a href="{{ url_for('main.bestellungen') }}">Bestellungen</a>{% if status in BEST_STATUS %} › {{ BEST_KURZ[status] }}{% elif status == 'alle' %} › Alle{% endif %}{% if jahr %} › {{ jahr }}{% endif %}{% if monat %} › {{ MONATE[monat] }}{% endif %}</p>
+  <h1>{{ BEST_STATUS[status] if status in BEST_STATUS else ('Alle Bestellungen' if status == 'alle' else 'Offene Bestellungen') }}</h1></div>
+  <div class="actions">
+    {% if status != 'alle' %}<a class="btn sek" href="{{ url_for('main.bestellungen', status='alle') }}">Alle anzeigen</a>{% endif %}
+  </div></div>
+{% if not status %}<p class="meta">Zeigt alles außer abgeschlossenen (bezahlten) Bestellungen. Die Ordner links gliedern nach Status und Datum.</p>{% endif %}
+{% if bestellungen %}
+<div class="scroll"><table>
+<thead><tr><th>Datum</th><th>Bestellnr.</th><th>Lieferant</th><th>Projekt</th><th class="r">Positionen</th><th class="r">Summe netto</th><th>Status</th></tr></thead>
+<tbody>{% for o in bestellungen %}
+{% set pr = [] %}{% for i in o.items %}{% if i.project and i.project.nummer not in pr %}{% set _ = pr.append(i.project.nummer) %}{% endif %}{% endfor %}
+<tr><td>{{ o.bestelldatum|datum }}</td>
+<td><a href="{{ url_for('main.bestellung_detail', oid=o.id) }}">{{ o.bestellnr or ('Nr. ' ~ o.id) }}</a></td>
+<td>{{ o.supplier.name }}</td>
+<td>{{ pr|join(', ') or '–' }}</td>
+<td class="r">{{ o.items|length }}</td><td class="r">{{ o.summe|money }}</td>
+<td><span class="chip s-{{ o.status }}">{{ BEST_KURZ[o.status] }}</span></td></tr>{% endfor %}</tbody></table></div>
+{% else %}<p class="leer">Keine Bestellungen in diesem Ordner.</p>{% endif %}
+{% endblock %}

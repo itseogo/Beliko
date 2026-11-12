@@ -1,0 +1,19 @@
+{% extends 'base.html' %}{% block title %}Lieferscheine{% endblock %}
+{% block content %}
+<div class="kopf"><h1>Lieferscheine</h1></div>
+<form method="get" class="leiste">
+  <label class="f"><span>Lieferschein-Nr.</span><input name="q" value="{{ suche }}"></label>
+  <label class="f"><span>Lieferant</span><select name="lieferant" onchange="this.form.submit()"><option value="">Alle</option>
+    {% for l in lieferanten %}<option value="{{ l.id }}" {{ 'selected' if lieferant_id == l.id }}>{{ l.name }}</option>{% endfor %}</select></label>
+  <button class="btn sek">Filtern</button>
+</form>
+{% if liste %}
+<div class="scroll"><table>
+<thead><tr><th>Datum</th><th>Lieferschein-Nr.</th><th>Lieferant</th><th>Bestellung</th><th class="r">Positionen</th><th>Notiz</th></tr></thead>
+<tbody>{% for d in liste %}<tr>
+  <td>{{ d.datum|datum }}</td><td>{{ d.lieferschein_nr or '–' }}</td><td>{{ d.order.supplier.name }}</td>
+  <td><a href="{{ url_for('main.bestellung_detail', oid=d.order_id) }}">{{ d.order.bestellnr or ('Nr. ' ~ d.order_id) }}</a></td>
+  <td class="r">{{ d.items|length }}</td><td>{{ d.notiz or '' }}</td></tr>{% endfor %}</tbody></table></div>
+<p class="meta">{{ liste|length }} Buchungen. Ein Lieferschein über mehrere Bestellungen erscheint je Bestellung einmal.</p>
+{% else %}<p class="leer">Noch keine Lieferscheine gebucht.{% if g.user.role != 'leser' %} Über „Neu“ oben legst du einen an.{% endif %}</p>{% endif %}
+{% endblock %}

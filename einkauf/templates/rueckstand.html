@@ -1,0 +1,45 @@
+{% extends 'base.html' %}{% from '_m.html' import auswahl with context %}{% block title %}Rückstand{% endblock %}
+{% block content %}
+<h1>Rückstand</h1>
+<form method="get" class="filter">
+  <label class="f"><span>Gruppieren nach</span><select name="gruppe">
+    <option value="projekt" {{ 'selected' if modus=='projekt' }}>Projekt</option>
+    <option value="lieferant" {{ 'selected' if modus=='lieferant' }}>Lieferant</option>
+    <option value="datum" {{ 'selected' if modus=='datum' }}>Liefertermin</option></select></label>
+  <label class="f"><span>Projekt</span><select name="projekt">
+    <option value="">Alle</option><option value="0" {{ 'selected' if projekt_id==0 }}>Ohne Projekt</option>
+    {% for p in projekte %}<option value="{{ p.id }}" {{ 'selected' if projekt_id==p.id }}>{{ p.nummer }} {{ p.name }}</option>{% endfor %}</select></label>
+  <label class="f"><span>Lieferant</span><select name="lieferant">
+    <option value="">Alle</option>
+    {% for l in lieferanten %}<option value="{{ l.id }}" {{ 'selected' if lieferant_id==l.id }}>{{ l.name }}</option>{% endfor %}</select></label>
+  <label class="f"><span>Artikel suchen</span><input name="suche" value="{{ suche }}"></label>
+  <div class="actions"><button class="btn">Filtern</button>
+  <a class="btn sek" href="{{ url_for('main.rueckstand', gruppe=modus, projekt=projekt_id, lieferant=lieferant_id, suche=suche, csv=1) }}">Als CSV</a></div>
+</form>
+<p class="meta">{{ anzahl }} Positionen im Rückstand. <span class="chip ueberfaellig">überfällig</span> <span class="chip bald">in 3 Tagen</span></p>
+{% for titel, items in gruppen.items() %}
+<h2>{{ titel }} <small>{{ items|length }}</small></h2>
+<div class="scroll"><table>
+<thead><tr>
+  {% if modus != 'projekt' %}<th>Projekt</th>{% endif %}
+  {% if modus != 'lieferant' %}<th>Lieferant</th>{% endif %}
+  <th>Artikel</th><th class="r">Bestellt</th><th class="r">Geliefert</th><th class="r">Rest</th><th>Bestellt am</th>
+  {% if modus != 'datum' %}<th>Voraussichtlich</th>{% endif %}</tr></thead>
+<tbody>
+{% for i in items %}
+<tr class="{{ i.faellig }}">
+  {% if modus != 'projekt' %}<td>{{ i.project.nummer if i.project else '–' }}</td>{% endif %}
+  {% if modus != 'lieferant' %}<td>{{ i.order.supplier.name }}</td>{% endif %}
+  <td><a href="{{ url_for('main.bestellung_detail', oid=i.order_id) }}">{{ i.bezeichnung }}</a>{% if i.artikelnr %}<small class="sub">{{ i.artikelnr }}</small>{% endif %}{% if i.kommission %}<small class="sub">Kommission: {{ i.kommission }}</small>{% endif %}{% if i.hinweis %}<small class="sub hinweis">{{ i.hinweis }}</small>{% endif %}</td>
+  <td class="r">{{ i.menge|qty }} {{ i.einheit or '' }}</td>
+  <td class="r">{{ i.geliefert|qty }}</td>
+  <td class="r"><b>{{ i.rest|qty }}</b></td>
+  <td>{{ i.order.bestelldatum|datum }}</td>
+  {% if modus != 'datum' %}<td>{{ i.erw_lieferdatum|datum or 'kein Termin' }}</td>{% endif %}
+</tr>
+{% endfor %}
+</tbody></table></div>
+{% else %}
+<p class="leer">Nichts im Rückstand für diese Auswahl.</p>
+{% endfor %}
+{% endblock %}

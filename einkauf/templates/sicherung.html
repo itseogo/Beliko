@@ -1,0 +1,13 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf with context %}{% block title %}Datensicherung{% endblock %}
+{% block content %}
+<div class="kopf"><h1>Datensicherung</h1></div>
+<div class="panel">
+  <p>Hier kannst du den kompletten Datenordner (<code>{{ daten_dir }}</code>) inkl. Konfiguration, SQLite-Datenbank (sofern genutzt) und abgelegten Lieferantendateien als ZIP-Archiv herunterladen.</p>
+  <p class="meta">Hinweis: Bei MariaDB auf dem NAS liegt die Datenbank selbst auf dem NAS und sollte dort zusätzlich gesichert werden.</p>
+  <form method="post" action="{{ url_for('main.einstellungen_sicherung_download') }}">
+    {{ csrf() }}
+    <button class="btn">Datensicherung herunterladen (ZIP)</button>
+  </form>
+</div>
+{% endblock %}
+

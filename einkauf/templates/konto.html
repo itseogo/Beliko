@@ -1,0 +1,24 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf, field with context %}{% block title %}Mein Konto{% endblock %}
+{% block content %}
+<form method="post" class="panel narrow">
+  <h1>Mein Konto</h1>
+  <p>Angemeldet als <strong>{{ g.user.username }}</strong>.</p>
+  {% if fehler %}<div class="flash fehler">{{ fehler }}</div>{% endif %}
+  {{ csrf() }}
+  {{ field('Aktuelles Passwort', 'alt', '', type='password', required=True) }}
+  {{ field('Neues Passwort', 'neu', '', type='password', required=True, hint='Mindestens 8 Zeichen') }}
+  {{ field('Neues Passwort wiederholen', 'neu2', '', type='password', required=True) }}
+  <button class="btn">Passwort ändern</button>
+</form>
+
+<form method="post" class="panel narrow">
+  <h2>Darstellung</h2>
+  <p class="meta">Gilt nur für deinen Benutzer, auf jedem Gerät, mit dem du dich anmeldest.</p>
+  {{ csrf() }}<input type="hidden" name="aktion" value="darstellung">
+  <fieldset class="optionen">
+    <legend class="sr">Farbschema</legend>
+    {% for k, t in themen.items() %}<label class="check"><input type="radio" name="theme" value="{{ k }}" {{ 'checked' if (g.user.theme or 'hell') == k }}> {{ t }}</label>{% endfor %}
+  </fieldset>
+  <button class="btn">Darstellung speichern</button>
+</form>
+{% endblock %}

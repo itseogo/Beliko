@@ -1,0 +1,53 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf, field with context %}{% block title %}Lieferantendatei prüfen{% endblock %}
+{% block content %}
+<p class="krumen"><a href="{{ url_for('main.bestellung_detail', oid=o.id) }}">← Abbrechen und zurück zur Bestellung</a></p>
+<h1>Lieferantendatei prüfen</h1>
+<p class="meta">{{ o.supplier.name }} · Datei {{ dateiname }} · Beleg {{ r.kopf.belegnr or '–' }}{% if r.datei.datum %} · Dateidatum {{ r.datei.datum|datum }}{% endif %}{% if r.kopf.datum %} · Belegdatum {{ r.kopf.datum|datum }}{% endif %} · Belegart laut Datei: <b>{{ r.kopf.belegart or '?' }}</b> (Kennung {{ r.datei.kennung or '?' }}) · Version {{ r.kopf.version or '?' }}</p>
+{% if duplikat_ls %}<div class="flash fehler">Achtung: Die Belegnummer <b>{{ r.kopf.belegnr }}</b> wurde bei diesem Lieferanten bereits als Lieferschein-Nr. gebucht (am {{ duplikat_ls.datum|datum }}). Bitte prüfen, um Doppelbuchungen zu vermeiden.</div>{% endif %}
+{% for w in r.warnungen %}<div class="flash warn">{{ w }}</div>{% endfor %}
+<div class="flash">Noch nichts übernommen. Prüfe die Zuordnung, wähle unten aus, was gelten soll, und bestätige dann.</div>
+
+<form method="post" action="{{ url_for('main.ugl_uebernehmen', oid=o.id) }}">
+{{ csrf() }}<input type="hidden" name="token" value="{{ token }}"><input type="hidden" name="dateiname" value="{{ dateiname }}">{% if datei_id %}<input type="hidden" name="datei_id" value="{{ datei_id }}">{% endif %}
+<div class="scroll"><table>
+<thead><tr><th></th><th>Pos.</th><th>Artikelnr.</th><th>Laut Datei</th><th class="r">Menge</th><th>Passende Bestellposition</th><th>Ergebnis</th></tr></thead>
+<tbody>
+{% for z in zeilen %}{% set p = z.p %}
+<tr>
+  <td>{% if z.zuordnung %}<input type="checkbox" name="pos" value="{{ p.pos }}" checked aria-label="Position {{ p.pos }} übernehmen">{% endif %}</td>
+  <td>{{ p.pos }}</td><td>{{ p.artikelnr }}</td>
+  <td>{{ p.text1 }}<small class="sub">{{ p.text2 }}</small></td>
+  <td class="r">{{ p.menge|qty }} {{ p.einheit }}</td>
+  <td>{% for item, menge in z.zuordnung %}{{ item.bezeichnung }} <small class="sub">{{ menge|qty }} von {{ item.rest|qty }} offen{% if item.project %} · {{ item.project.nummer }}{% endif %}{% if item.kommission %} · {{ item.kommission }}{% endif %}</small>{% else %}–{% endfor %}</td>
+  <td>
+    {% if z.art == 'ok' %}<span class="chip ok">passt</span>
+    {% elif z.art == 'weniger' %}<span class="chip bald">weniger als offen</span>
+    {% elif z.art == 'mehr' %}<span class="chip bald">{{ z.rest_ueber|qty }} mehr als offen</span>
+    {% elif z.art == 'schon_geliefert' %}<span class="chip bald">schon vollständig geliefert</span>
+    {% else %}<span class="chip ueberfaellig">nicht in dieser Bestellung</span>{% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody></table></div>
+
+{% if fehlend %}
+<h2>Offene Positionen, die nicht in der Datei stehen</h2>
+<div class="scroll"><table>
+<thead><tr><th>Artikelnr.</th><th>Bezeichnung</th><th class="r">Offen</th><th>Projekt</th></tr></thead>
+<tbody>{% for i in fehlend %}<tr><td>{{ i.artikelnr or '–' }}</td><td>{{ i.bezeichnung }}</td><td class="r">{{ i.rest|qty }} {{ i.einheit or '' }}</td><td>{{ i.project.nummer if i.project else '–' }}</td></tr>{% endfor %}</tbody></table></div>
+{% endif %}
+
+<div class="panel">
+  <label class="check"><input type="checkbox" name="vermerken" value="1" checked> Fehlende und unvollständige Positionen mit einem Hinweis versehen (z. B. „beim Lieferanten in Rückstand“)</label>
+  <div class="grid4">
+    {{ field('Lieferschein-Nr. (nur bei Wareneingang)', 'lieferschein_nr', r.kopf.belegnr) }}
+    {{ field('Lieferdatum (nur bei Wareneingang)', 'datum', (r.datei.datum or heute).isoformat(), type='date') }}
+  </div>
+  <p class="meta">Welche Belegart ist das? Die Datei sagt „{{ r.kopf.belegart or '?' }}“, was nach Auftragsbestätigung klingt, aber nicht sicher ist. Im Zweifel auf dem Beleg des Lieferanten nachsehen.</p>
+  <div class="actions">
+    <button class="btn {{ '' if r.kopf.belegart != 'AB' else 'sek' }}" name="aktion" value="lieferschein" onclick="return confirm('Die ausgewählten Mengen als Wareneingang buchen?')">Als Lieferschein buchen (Wareneingang)</button>
+    <button class="btn {{ 'sek' if r.kopf.belegart != 'AB' else '' }}" name="aktion" value="ab">Als Auftragsbestätigung vermerken (nichts buchen)</button>
+  </div>
+</div>
+</form>
+{% endblock %}

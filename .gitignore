@@ -1,0 +1,37 @@
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Lokale Daten & Konfiguration (Passwörter, DB-Dateien, Schlüssel)
+einkauf-data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads & temporäre Importe
+einkauf/static/temp/
+einkauf-data/ids/
+einkauf-data/import/
+
+# Build & Auslieferung
+*.zip
+*.tar.gz
+dist/
+build/
+*.egg-info/
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db

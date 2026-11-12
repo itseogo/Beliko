@@ -1,0 +1,132 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf with context %}{% block title %}Projekte{% endblock %}
+{% block content %}
+<div class="kopf"><h1>Projekte</h1>
+</div>
+
+<form method="get" class="leiste">
+  {% if p %}<input type="hidden" name="p" value="{{ p.id }}"><input type="hidden" name="tab" value="{{ tab }}">{% endif %}
+  <label class="f"><span>Suchen</span><input name="q" value="{{ suche }}" placeholder="Nummer, Name oder Kunde"></label>
+  <label class="f"><span>Anzeigen</span><select name="status" onchange="this.form.submit()">
+    <option value="laufend" {{ 'selected' if status == 'laufend' }}>Laufende Projekte</option>
+    {% for k, t in STATUS.items() %}<option value="{{ k }}" {{ 'selected' if status == k }}>{{ t }}</option>{% endfor %}
+    <option value="alle" {{ 'selected' if status == 'alle' }}>Alle</option></select></label>
+  <button class="btn sek">Filtern</button>
+</form>
+
+<div class="liste-oben scroll">
+{% if projekte %}
+<table class="wahl">
+<thead><tr><th>Nr.</th><th>Name</th><th>Kunde</th><th>Status</th><th class="r">Offen</th><th class="r">Bestellt</th><th class="r">Materialbudget</th></tr></thead>
+<tbody>
+{% for q in projekte %}{% set s = summen(q) %}
+<tr class="{{ 'sel' if p and p.id == q.id }}" onclick="location.href='{{ url_for('main.projekte', p=q.id, tab=tab, status=status, q=suche or None) }}#unten'">
+  <td>{{ q.nummer }}</td>
+  <td><a href="{{ url_for('main.projekte', p=q.id, tab=tab, status=status, q=suche or None) }}#unten">{{ q.name }}</a></td>
+  <td>{{ q.kunde or '' }}</td><td>{{ STATUS[q.status] }}</td>
+  <td class="r">{{ s.offen }}</td><td class="r">{{ s.bestellt|money }}</td>
+  <td class="r">{% if s.budget is not none %}{{ s.budget|money }}{% if s.prozent is not none %} <span class="chip {{ 'ueberfaellig' if s.prozent > 100 else ('bald' if s.prozent >= 80 else 'ok') }}">{{ s.prozent }} %</span>{% endif %}{% else %}–{% endif %}</td>
+</tr>
+{% endfor %}
+</tbody></table>
+{% else %}<p class="leer" style="margin:.5rem">Keine Projekte für diese Auswahl.{% if g.user.role != 'leser' %} Lege über „Neu“ oben eines an.{% endif %}</p>{% endif %}
+</div>
+
+<section id="unten" class="unten">
+{% if p %}
+{% set s = summen(p) %}
+<div class="kopf"><div><h2 class="p-titel">{{ p.nummer }} · {{ p.name }}</h2>
+  <p class="meta">{% if p.contact_id %}<a href="{{ url_for('main.kontakt_detail', cid=p.contact_id) }}">{{ p.kunde }}</a>{% else %}{{ p.kunde or 'Kein Kunde angegeben' }}{% endif %} · {{ STATUS[p.status] }}</p></div>
+  {% if g.user.role != 'leser' %}<a class="btn sek" href="{{ url_for('main.projekt_bearbeiten', pid=p.id) }}">Bearbeiten</a>{% endif %}</div>
+<div class="tabs">
+  {% for k, t in [('bestellungen', 'Bestellungen'), ('material', 'Material'), ('lexoffice', 'Angebote / Rechnungen'), ('uebersicht', 'Übersicht')] %}
+  <a class="{{ 'on' if tab == k }}" href="{{ url_for('main.projekte', p=p.id, tab=k, status=status, q=suche or None) }}#unten">{{ t }}{% if k == 'lexoffice' and p.lex_documents %} ({{ p.lex_documents|length }}){% endif %}</a>{% endfor %}
+</div>
+
+{% if tab == 'uebersicht' %}
+<div class="kpis">
+  <div class="kpi"><b>{{ s.bestellt|money }}</b><span>bestellt (netto)</span></div>
+  <div class="kpi"><b>{{ s.geliefert|money }}</b><span>davon geliefert</span></div>
+  <div class="kpi {{ 'rot' if s.rest is not none and s.rest < 0 }}"><b>{{ s.rest|money if s.rest is not none else '–' }}</b><span>{{ 'Rest vom Materialbudget ' ~ (s.budget|money) if s.budget is not none else 'kein Materialbudget gesetzt' }}</span></div>
+  <div class="kpi"><b>{{ s.offen }}</b><span>offene Positionen</span></div>
+</div>
+{% if s.modus != 'manuell' %}<p class="meta">Budget-Modus: <b>{{ BUDGET_MODI[s.modus] }}</b>{% if s.modus == 'faktor' %} (Faktor {{ (p.budget_faktor or 1)|qty }}){% endif %} · Warensumme aus {{ s.angebote_n }} Angebot(en): {{ s.warensumme|money }}.</p>{% endif %}
+{% if s.unklar_pos %}<div class="flash warn">{{ s.unklar_pos }} Angebotsposition(en) haben noch keine Kostenart („unklar“) und fehlen deshalb in der Warensumme. <a href="{{ url_for('main.projekte', p=p.id, tab='lexoffice', status=status, q=suche or None) }}#unten">Jetzt zuordnen</a></div>{% endif %}
+{% if s.prozent is not none %}<div class="balken"><i class="{{ 'rot' if s.prozent > 100 else ('gelb' if s.prozent >= 80 else '') }}" style="width: {{ [s.prozent, 100]|min }}%"></i></div>{% endif %}
+{% if s.ohne_preis %}<div class="flash warn">{{ s.ohne_preis }} Positionen haben keinen Preis und fehlen deshalb in der Summe.</div>{% endif %}
+{% if s.entwurf %}<div class="flash warn">{{ s.entwurf }} Positionen stehen in Bestellungen mit Status „Neu“ und sind in den Summen noch nicht enthalten.</div>{% endif %}
+{% if p.notiz %}<p>{{ p.notiz }}</p>{% else %}<p class="meta">Keine Notiz.</p>{% endif %}
+
+{% elif tab == 'lexoffice' %}
+<div class="kpis">
+  <div class="kpi"><b>{{ s.warensumme|money }}</b><span>Warensumme aus Angeboten</span></div>
+  <div class="kpi"><b>{{ s.budget|money if s.budget is not none else '–' }}</b><span>Materialbudget ({{ BUDGET_MODI[s.modus] }})</span></div>
+  <div class="kpi"><b>{{ s.bestellt|money }}</b><span>bestellt (netto)</span></div>
+  <div class="kpi {{ 'rot' if s.rest is not none and s.rest < 0 }}"><b>{{ s.rest|money if s.rest is not none else '–' }}</b><span>Differenz (Budget − Bestellt)</span></div>
+</div>
+{% if s.rechnungen_summe %}<p class="meta">Summe verknüpfter Rechnungen (netto): <b>{{ s.rechnungen_summe|money }}</b>.</p>{% endif %}
+{% if s.unklar_pos %}<div class="flash warn">{{ s.unklar_pos }} Angebotsposition(en) sind noch als „unklar“ markiert. Öffne das Angebot unten, um die Kostenarten festzulegen.</div>{% endif %}
+
+{% if p.lex_documents %}
+<div class="scroll"><table>
+  <thead><tr><th>Typ</th><th>Nummer</th><th>Datum</th><th>Titel / Kunde</th><th>Status</th><th class="r">Netto</th><th class="r">Materialwert</th><th></th></tr></thead>
+  <tbody>{% for d in p.lex_documents %}<tr>
+    <td><span class="chip">{{ BELEG_TYPEN.get(d.typ, d.typ) }}</span></td>
+    <td><a href="{{ url_for('main.lex_beleg_detail', did=d.id, von=p.id) }}">{{ d.nummer or ('Beleg #' ~ d.id) }}</a></td>
+    <td>{{ d.datum|datum }}</td>
+    <td>{{ d.titel or d.kunde_name or '–' }}</td>
+    <td>{{ BELEG_STATUS.get(d.status, d.status or '–') }}</td>
+    <td class="r">{{ d.netto|money if d.netto is not none else '–' }}</td>
+    <td class="r">{{ d.materialwert|money }}{% if d.unklar_anzahl %} <span class="chip bald">{{ d.unklar_anzahl }} unklar</span>{% endif %}</td>
+    <td>{% if g.user.role != 'leser' %}
+      <form method="post" action="{{ url_for('main.projekt_beleg_zuordnen', pid=p.id) }}" style="display:inline">
+        {{ csrf() }}<input type="hidden" name="document_id" value="{{ d.id }}"><input type="hidden" name="aktion" value="loesen">
+        <button class="btn sek">Lösen</button>
+      </form>{% endif %}</td>
+  </tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<p class="leer">Diesem Projekt sind noch keine Lexoffice-Belege zugeordnet.</p>{% endif %}
+
+{% if g.user.role != 'leser' and belege_frei %}
+<form method="post" action="{{ url_for('main.projekt_beleg_zuordnen', pid=p.id) }}" class="leiste" style="margin-top:1rem">
+  {{ csrf() }}
+  <label class="f" style="min-width:20rem"><span>Lexoffice-Beleg zuordnen</span>
+    <select name="document_id">
+      {% for d in belege_frei %}<option value="{{ d.id }}">{{ BELEG_TYPEN.get(d.typ, d.typ) }} {{ d.nummer or '' }} · {{ d.datum|datum }} · {{ d.kunde_name or '–' }} ({{ d.netto|money if d.netto is not none else '–' }})</option>{% endfor %}
+    </select></label>
+  <button class="btn sek">Zuordnen</button>
+</form>
+{% endif %}
+
+{% elif tab == 'material' %}
+{% if items %}
+<div class="scroll"><table>
+<thead><tr><th>Artikel</th><th class="r">Bestellt</th><th class="r">Geliefert</th><th>Status</th><th>Lieferant</th><th>Voraussichtlich</th><th class="r">Preis</th></tr></thead>
+<tbody>{% for i in items %}
+<tr class="{{ i.faellig }} {{ 'storno' if i.storniert }}">
+  <td><a href="{{ url_for('main.bestellung_detail', oid=i.order_id, von=p.id) }}">{{ i.bezeichnung }}</a>{% if i.artikelnr %}<small class="sub">{{ i.artikelnr }}</small>{% endif %}{% if i.kommission %}<small class="sub">Kommission: {{ i.kommission }}</small>{% endif %}{% if i.hinweis %}<small class="sub hinweis">{{ i.hinweis }}</small>{% endif %}</td>
+  <td class="r">{{ i.menge|qty }} {{ i.einheit or '' }}</td><td class="r">{{ i.geliefert|qty }}</td>
+  <td>{{ i.status }}</td><td>{{ i.order.supplier.name }}</td>
+  <td>{{ i.erw_lieferdatum|datum }}</td><td class="r">{{ (i.menge * i.preis)|money if i.preis is not none else '–' }}</td>
+</tr>{% endfor %}</tbody></table></div>
+{% else %}<p class="leer">Diesem Projekt ist noch kein Material zugeordnet. Beim Erfassen einer Bestellposition wählst du das Projekt aus.</p>{% endif %}
+
+{% else %}
+{% set gesamt = namespace(n=0) %}{% for lst in gruppen.values() %}{% set gesamt.n = gesamt.n + lst|length %}{% endfor %}
+{% if gesamt.n %}
+{% for key, lst in gruppen.items() if lst %}
+<h3 class="gruppe"><span class="chip s-{{ key }}">{{ BEST_STATUS[key] }}</span> <small>{{ lst|length }}</small></h3>
+<div class="scroll"><table>
+<thead><tr><th>Datum</th><th>Bestellnr.</th><th>Lieferant</th><th class="r">Positionen</th><th class="r">davon offen</th><th class="r">Summe (dieses Projekt)</th></tr></thead>
+<tbody>{% for e in lst %}<tr>
+  <td>{{ e.o.bestelldatum|datum }}</td>
+  <td><a href="{{ url_for('main.bestellung_detail', oid=e.o.id, von=p.id) }}">{{ e.o.bestellnr or ('Nr. ' ~ e.o.id) }}</a></td>
+  <td>{{ e.o.supplier.name }}</td><td class="r">{{ e.pos|length }}</td><td class="r">{{ e.offen }}</td><td class="r">{{ e.summe|money }}</td></tr>{% endfor %}</tbody></table></div>
+{% endfor %}
+{% else %}<p class="leer">Für dieses Projekt gibt es noch keine Bestellungen.{% if g.user.role != 'leser' %} Lege über „Neu“ oben eine an.{% endif %}</p>{% endif %}
+{% endif %}
+{% else %}
+<p class="leer">Wähle oben ein Projekt aus. Hier erscheinen dann seine Bestellungen, das Material und die Übersicht.</p>
+{% endif %}
+</section>
+<script>var s=document.querySelector('.liste-oben tr.sel'); if(s){s.scrollIntoView({block:'nearest'});}</script>
+{% endblock %}

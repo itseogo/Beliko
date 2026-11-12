@@ -1,0 +1,30 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf with context %}{% block title %}Lieferantendateien{% endblock %}
+{% block content %}
+<div class="kopf"><h1>Lieferantendateien</h1>
+  {% if g.user.role != 'leser' %}<form method="post" action="{{ url_for('main.dateien_abrufen') }}">{{ csrf() }}<button class="btn" {{ 'disabled' if not abrufbar }}>Jetzt alle abrufen</button></form>{% endif %}</div>
+<p class="meta">Dateien, die per FTP aus dem Ausgang-Ordner der Lieferanten geholt wurden (Auftragsbestätigungen, Lieferscheine). Gelesen wird nur, beim Lieferanten wird nichts gelöscht. Ein Lieferant wird abgerufen, wenn unter Einstellungen → Lieferanten die UGL-Schnittstelle (FTP, FTPS oder Ordner) eingerichtet ist.</p>
+{% if abrufbar %}<div class="scroll"><table><thead><tr><th>Lieferant</th><th>Abruf</th><th>Letzter Abruf</th><th>Ergebnis</th><th></th></tr></thead><tbody>
+{% for s in abrufbar %}<tr><td>{{ s.name }}</td><td>{{ s.ugl_verfahren|upper }}{% if s.ugl_auto_min %} · alle {{ s.ugl_auto_min }} Min.{% else %} · manuell{% endif %}</td>
+<td>{{ s.ugl_letzter_abruf.strftime('%d.%m.%Y %H:%M') if s.ugl_letzter_abruf else '–' }}</td><td>{{ s.ugl_abruf_status or '' }}</td>
+<td>{% if g.user.role != 'leser' %}<form method="post" action="{{ url_for('main.dateien_abrufen') }}">{{ csrf() }}<input type="hidden" name="lieferant" value="{{ s.id }}"><button class="btn sek">Abrufen</button></form>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<p class="leer">Noch kein Lieferant mit eingerichtetem Abruf. {% if g.user.role == 'admin' %}Das richtest du unter <a href="{{ url_for('main.lieferanten') }}">Einstellungen → Lieferanten</a> ein (Übertragungsweg, Server, Pfad Ausgang, Zugang).{% endif %}</p>{% endif %}
+
+<form method="get" class="leiste">
+  <label class="f"><span>Status</span><select name="status" onchange="this.form.submit()">
+    {% for k, t in DATEI_STATUS.items() %}<option value="{{ k }}" {{ 'selected' if status == k }}>{{ t }}</option>{% endfor %}
+    <option value="alle" {{ 'selected' if status == 'alle' }}>Alle</option></select></label>
+  <label class="f"><span>Lieferant</span><select name="lieferant" onchange="this.form.submit()"><option value="">Alle</option>
+    {% for l in lieferanten %}<option value="{{ l.id }}" {{ 'selected' if lieferant_id == l.id }}>{{ l.name }}</option>{% endfor %}</select></label>
+</form>
+{% if liste %}
+<div class="scroll"><table>
+<thead><tr><th>Abgerufen</th><th>Lieferant</th><th>Datei</th><th>Beleg</th><th>Art</th><th>Datum in der Datei</th><th class="r">Positionen</th><th>Status</th></tr></thead>
+<tbody>{% for f in liste %}<tr>
+  <td>{{ f.abgerufen_am.strftime('%d.%m.%Y %H:%M') }}</td><td>{{ f.supplier.name }}</td>
+  <td><a href="{{ url_for('main.datei_detail', fid=f.id) }}">{{ f.name }}</a></td>
+  <td>{{ f.belegnr or '–' }}</td><td>{{ f.belegart or '–' }}{% if f.kennung %} / {{ f.kennung }}{% endif %}</td><td>{{ f.datei_datum|datum or '–' }}</td>
+  <td class="r">{{ f.positionen if f.positionen is not none else '–' }}</td>
+  <td><span class="chip {{ 'bald' if f.status == 'neu' else ('ueberfaellig' if f.status == 'fehler' else 'ok') }}">{{ DATEI_STATUS[f.status] }}</span></td></tr>{% endfor %}</tbody></table></div>
+{% else %}<p class="leer">Keine Dateien in dieser Auswahl.</p>{% endif %}
+{% endblock %}
