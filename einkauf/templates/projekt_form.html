@@ -10,7 +10,11 @@
   {{ field('Projektname', 'name', p.name, required=True) }}
   <label class="f"><span>Kunde</span>
     <input name="kunde" value="{{ p.kunde or '' }}" list="kunden-liste" autocomplete="off" placeholder="aus den Kontakten wählen oder eintippen">
-    <datalist id="kunden-liste">{% for k in kunden %}<option value="{{ k.name }}" label="{{ k.nummern }}{{ ' · ' ~ k.ort if k.ort }}"></option>{% endfor %}</datalist>
+    <datalist id="kunden-liste">
+      {% for k in kunden %}
+      <option value="{{ k.name }}">{{ k.name }}{% if k.nummern or k.ort %} ({{ k.nummern }}{{ ' · ' ~ k.ort if k.ort }}){% endif %}</option>
+      {% endfor %}
+    </datalist>
     <small>Beim Eintippen erscheinen passende Kontakte. Gibt es den Kunden dort nicht, schreib den Namen einfach selbst hin. {% if g.user.role != 'leser' %}<a href="{{ url_for('main.kontakt_neu') }}" target="_blank">Kontakt anlegen</a>{% endif %}</small></label>
   {{ auswahl('Status', 'status', status.items()|list, p.status) }}
   {{ auswahl('Materialbudget-Berechnung', 'budget_modus', budget_modi.items()|list, p.budget_modus or 'manuell') }}
