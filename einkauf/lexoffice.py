@@ -187,6 +187,7 @@ BELEG_PFADE = {
     "orderconfirmation": ("auftrag", "/order-confirmations/"),
     "invoice": ("rechnung", "/invoices/"),
     "salesinvoice": ("rechnung", "/invoices/"),
+    "purchaseinvoice": ("eingangsrechnung", "/vouchers/"),
 }
 BELEG_STATUS_FILTER = "any"
 
@@ -217,8 +218,8 @@ def artikel_schluessel(lex_artikel_id, bezeichnung):
     return f"name:{name}"[:300] if name else None
 
 
-def alle_belege(basis, schluessel, typen, datum_ab=None):
-    """Lädt die Belegliste (/v1/voucherlist) für die gewünschten Typen (seitenweise), optional ab einem Datum."""
+def alle_belege(basis, schluessel, typen, datum_ab=None, datum_bis=None):
+    """Lädt die Belegliste (/v1/voucherlist) für die gewünschten Typen (seitenweise), optional ab/bis zu einem Datum."""
     if not typen:
         return []
     erg, seite = [], 0
@@ -230,6 +231,8 @@ def alle_belege(basis, schluessel, typen, datum_ab=None):
     }
     if datum_ab:
         params["voucherDateFrom"] = str(datum_ab)[:10]
+    if datum_bis:
+        params["voucherDateTo"] = str(datum_bis)[:10]
     while True:
         params["page"] = seite
         d = anfrage(basis, schluessel, "/voucherlist", params)
@@ -253,24 +256,24 @@ def _beleg_uebernehmen(doc, kopf, detail, kontakte_by_lex, regeln):
     doc.nummer = _k(detail.get("voucherNumber") or kopf.get("voucherNumber"), 60)
     doc.datum = _datum(detail.get("voucherDate") or kopf.get("voucherDate"))
     doc.status = _k(detail.get("voucherStatus") or kopf.get("voucherStatus"), 30)
-    doc.titel = _k(detail.get("title"), 300)
+    doc.titel = _k(detail.get("title") or detail.get("remark") or detail.get("description"), 300)
     doc.archiviert = bool(detail.get("archived") if "archived" in detail else kopf.get("archived"))
     doc.lexoffice_version = detail.get("version")
     doc.updated_at_lex = _k(kopf.get("updatedDate") or detail.get("updatedDate"), 40)
     doc.letzter_sync = datetime.now()
 
     addr = detail.get("address") or {}
-    clex = _k(addr.get("contactId") or kopf.get("contactId"), 40)
+    clex = _k(detail.get("contactId") or addr.get("contactId") or kopf.get("contactId"), 40)
     doc.contact_lex_id = clex
     doc.contact_id = kontakte_by_lex.get(clex) if clex else None
-    doc.kunde_name = _k(kopf.get("contactName") or addr.get("name"), 200)
+    doc.kunde_name = _k(detail.get("contactName") or kopf.get("contactName") or addr.get("name"), 200)
 
     tp = detail.get("totalPrice") or {}
-    doc.netto = _dec(tp.get("totalNetAmount"))
+    doc.netto = _dec(tp.get("totalNetAmount") or detail.get("totalNetAmount"))
     if doc.netto is None:
         doc.netto = _dec(kopf.get("totalAmount"))
-    doc.brutto = _dec(tp.get("totalGrossAmount"))
-    doc.waehrung = _k(tp.get("currency") or kopf.get("currency") or "EUR", 10)
+    doc.brutto = _dec(tp.get("totalGrossAmount") or detail.get("totalGrossAmount"))
+    doc.waehrung = _k(tp.get("currency") or detail.get("currency") or kopf.get("currency") or "EUR", 10)
 
     # Bestehende manuelle Kostenarten dieses Belegs vor dem Ersetzen sichern
     alt_by_key = {}
@@ -283,8 +286,49 @@ def _beleg_uebernehmen(doc, kopf, detail, kontakte_by_lex, regeln):
             alt_by_pos[(alt.position, alt.bezeichnung)] = (alt.kostenart, alt.materialanteil)
 
     doc.items.clear()
-    tax_type = (detail.get("taxConditions") or {}).get("taxType", "net")
-    for idx, li in enumerate(detail.get("lineItems") or [], start=1):
+    tax_type = (detail.get("taxConditions") or {}).get("taxType") or detail.get("taxType", "net")
+
+    # Positionsdaten: Entweder lineItems (Verkaufsbelege) oder voucherItems (Eingangsrechnungen / Vouchers)
+    raw_items = detail.get("lineItems")
+    if raw_items is None and detail.get("voucherItems"):
+        raw_items = []
+        for v_idx, vi in enumerate(detail.get("voucherItems") or [], start=1):
+            amt = _dec(vi.get("amount"))
+            rate = _dec(vi.get("taxRatePercent")) or Decimal("0")
+            tax_amt = _dec(vi.get("taxAmount"))
+            if tax_type == "gross" and amt is not None and rate > 0:
+                net_amt = (amt / (Decimal("1") + rate / Decimal("100"))).quantize(Decimal("0.01"))
+            elif tax_type == "gross" and amt is not None and tax_amt is not None:
+                net_amt = amt - tax_amt
+            else:
+                net_amt = amt
+            name = _k(vi.get("description") or vi.get("categoryId") or f"Position {v_idx}", 300)
+            raw_items.append({
+                "type": "material",
+                "id": _k(vi.get("categoryId"), 40),
+                "name": name,
+                "description": None,
+                "quantity": Decimal("1"),
+                "unitName": "Psch",
+                "unitPrice": {"netAmount": net_amt, "taxRatePercentage": rate},
+                "lineItemAmount": net_amt,
+                "discountPercentage": 0,
+            })
+    elif not raw_items and doc.netto is not None:
+        raw_items = [{
+            "type": "material",
+            "id": None,
+            "name": doc.titel or doc.nummer or "Belegposition",
+            "quantity": Decimal("1"),
+            "unitName": "Psch",
+            "unitPrice": {"netAmount": doc.netto},
+            "lineItemAmount": doc.netto,
+            "discountPercentage": 0,
+        }]
+    else:
+        raw_items = raw_items or []
+
+    for idx, li in enumerate(raw_items, start=1):
         lex_typ = _k(li.get("type"), 20)
         lex_art_id = _k(li.get("id"), 40)
         bez = _k(li.get("name"), 300) or ("Text" if lex_typ == "text" else f"Position {idx}")
@@ -341,8 +385,9 @@ def _beleg_uebernehmen(doc, kopf, detail, kontakte_by_lex, regeln):
         ))
 
 
-def belege_synchronisieren(session, basis, schluessel, angebote=False, auftraege=False, rechnungen=False, datum_ab=None):
-    """Gleicht Angebote, Aufträge und Rechnungen einseitig ab (Lexoffice → App)."""
+def belege_synchronisieren(session, basis, schluessel, angebote=False, auftraege=False,
+                           rechnungen=False, eingangsrechnungen=False, datum_ab=None, datum_bis=None):
+    """Gleicht Angebote, Aufträge, Rechnungen und Eingangsrechnungen einseitig ab (Lexoffice → App)."""
     typen = []
     if angebote:
         typen.append("quotation")
@@ -350,11 +395,13 @@ def belege_synchronisieren(session, basis, schluessel, angebote=False, auftraege
         typen.append("orderconfirmation")
     if rechnungen:
         typen.append("invoice")
+    if eingangsrechnungen:
+        typen.append("purchaseinvoice")
     erg = {"gesamt": 0, "neu": 0, "aktualisiert": 0, "unveraendert": 0}
     if not typen:
         return erg
 
-    liste = alle_belege(basis, schluessel, typen, datum_ab=datum_ab)
+    liste = alle_belege(basis, schluessel, typen, datum_ab=datum_ab, datum_bis=datum_bis)
     erg["gesamt"] = len(liste)
     bestehende = {d.lexoffice_id: d for d in session.query(LexDocument).all()}
     kontakte_by_lex = {c.lexoffice_id: c.id for c in session.query(Contact).filter(Contact.lexoffice_id.isnot(None)).all()}

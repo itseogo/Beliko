@@ -23,16 +23,40 @@
   {% for o in optionen %}
   <label class="check"><input type="checkbox" name="{{ o.key }}" value="1" {{ 'checked' if o.an }} {{ 'disabled' if not o.umgesetzt }}> {{ o.titel }}{% if not o.umgesetzt %} <span class="chip">folgt später</span>{% endif %}</label>
   {% endfor %}
-  <div class="grid2" style="margin-top:.75rem">
-    <label class="f"><span>Belege abrufen ab Datum (optional)</span><input type="date" name="lex_belege_ab" value="{{ belege_ab }}"><small>Belege vor diesem Datum werden beim Abgleich ignoriert (z. B. 01.01.2026). Leer lassen, um alle Belege zu laden.</small></label>
-    <label class="f"><span>Wann?</span><select name="lex_intervall" disabled><option>Nur auf Knopfdruck</option></select><small>Ein automatischer Abgleich (z. B. nachts) folgt später.</small></label>
+
+  <h3 style="margin-top:1.25rem">Zeitraum-Filter für Belege</h3>
+  <div class="grid2">
+    <label class="f"><span>Belege abrufen für Jahr</span>
+      <select name="lex_filter_jahr">
+        <option value="">Alle Jahre (keine Einschränkung)</option>
+        {% for j in jahre %}
+        <option value="{{ j }}" {{ 'selected' if filter_jahr == j|string }}>{{ j }}</option>
+        {% endfor %}
+      </select>
+      <small>Holt nur Belege aus dem ausgewählten Jahr.</small>
+    </label>
+    <label class="f"><span>Monat (optional)</span>
+      <select name="lex_filter_monat">
+        <option value="">Ganzes Jahr (alle Monate)</option>
+        {% for m_idx in range(1, 13) %}
+        <option value="{{ m_idx }}" {{ 'selected' if filter_monat == m_idx|string }}>{{ '%02d'|format(m_idx) }} – {{ MONATE[m_idx] }}</option>
+        {% endfor %}
+      </select>
+      <small>Gilt in Kombination mit dem gewählten Jahr.</small>
+    </label>
   </div>
-  <button class="btn">Speichern</button>
+  <details class="zusatz" style="margin-top:.5rem"><summary>Genauer Datumsbereich (von / bis Datum)</summary>
+    <div class="grid2" style="margin-top:.5rem">
+      <label class="f"><span>Datum ab</span><input type="date" name="lex_belege_ab" value="{{ belege_ab }}"><small>Belege vor diesem Datum werden ignoriert (wird durch Jahr/Monat überschrieben falls gesetzt).</small></label>
+      <label class="f"><span>Datum bis</span><input type="date" name="lex_belege_bis" value="{{ belege_bis }}"><small>Belege nach diesem Datum werden ignoriert.</small></label>
+    </div>
+  </details>
+  <button class="btn" style="margin-top:1rem">Speichern</button>
 </form>
 
 <div class="panel">
   <h3>Prüfen und abgleichen</h3>
-  <p class="meta">Zuerst speichern, dann testen. Der Abgleich holt Kontakte (je 250 pro Anfrage) und die oben gewählten Belege (Angebote, Aufträge, Rechnungen). Kontakte, die in Lexoffice nicht mehr vorkommen oder durch die Optionen oben ausgeschlossen sind, werden in BeLiKo archiviert, nicht gelöscht.</p>
+  <p class="meta">Zuerst speichern, dann testen. Der Abgleich holt Kontakte (je 250 pro Anfrage) und die oben gewählten Belege (Angebote, Aufträge, Ausgangsrechnungen, Eingangsrechnungen) im eingestellten Zeitraum. Kontakte, die in Lexoffice nicht mehr vorkommen oder durch die Optionen oben ausgeschlossen sind, werden in BeLiKo archiviert, nicht gelöscht.</p>
   <div class="actions">
     <form method="post" action="{{ url_for('main.lexoffice_test') }}">{{ csrf() }}<button class="btn sek">Verbindung testen</button></form>
     <form method="post" action="{{ url_for('main.lexoffice_sync') }}">{{ csrf() }}<button class="btn" {{ 'disabled' if not (aktiv and hat_key) }}>Jetzt abgleichen</button></form>
@@ -57,6 +81,6 @@
       <tr><th>Belege aktualisiert</th><td>{{ letzter.belege.aktualisiert }}</td></tr>
       <tr><th>Belege unverändert</th><td>{{ letzter.belege.unveraendert }}</td></tr></table>{% endif %}
   {% else %}<p class="meta">Noch kein Abgleich durchgeführt.</p>{% endif %}
-  <p class="meta">In BeLiKo stehen derzeit {{ anzahl }} Kontakte aus Lexoffice (<a href="{{ url_for('main.kontakte') }}">Zu den Kontakten</a>) sowie {{ belege_anz.angebot }} Angebote, {{ belege_anz.auftrag }} Aufträge und {{ belege_anz.rechnung }} Rechnungen (<a href="{{ url_for('main.lex_belege') }}">Zu den Belegen</a>).</p>
+  <p class="meta">In BeLiKo stehen derzeit {{ anzahl }} Kontakte aus Lexoffice (<a href="{{ url_for('main.kontakte') }}">Zu den Kontakten</a>) sowie {{ belege_anz.angebot }} Angebote, {{ belege_anz.auftrag }} Aufträge und {{ belege_anz.rechnung }} Rechnungen{% if belege_anz.eingangsrechnung %} sowie {{ belege_anz.eingangsrechnung }} Eingangsrechnungen{% endif %} (<a href="{{ url_for('main.lex_belege') }}">Zu den Belegen</a>).</p>
 </div>
 {% endblock %}

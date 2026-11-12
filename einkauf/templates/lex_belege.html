@@ -11,6 +11,14 @@
     <option value="alle" {{ 'selected' if typ == 'alle' }}>Alle Belege</option>
     {% for k, t in BELEG_TYPEN.items() %}<option value="{{ k }}" {{ 'selected' if typ == k }}>{{ t }}</option>{% endfor %}
   </select></label>
+  <label class="f"><span>Jahr</span><select name="jahr" onchange="this.form.submit()">
+    <option value="alle" {{ 'selected' if jahr == 'alle' }}>Alle Jahre</option>
+    {% for j in jahre %}<option value="{{ j }}" {{ 'selected' if jahr == j|string }}>{{ j }}</option>{% endfor %}
+  </select></label>
+  <label class="f"><span>Monat</span><select name="monat" onchange="this.form.submit()">
+    <option value="alle" {{ 'selected' if monat == 'alle' }}>Alle Monate</option>
+    {% for m_idx in range(1, 13) %}<option value="{{ m_idx }}" {{ 'selected' if monat == m_idx|string }}>{{ '%02d'|format(m_idx) }} – {{ MONATE[m_idx] }}</option>{% endfor %}
+  </select></label>
   <label class="f"><span>Projekt</span><select name="projekt" onchange="this.form.submit()">
     <option value="alle" {{ 'selected' if projekt == 'alle' }}>Alle</option>
     <option value="ohne" {{ 'selected' if projekt == 'ohne' }}>Ohne Projekt</option>
@@ -21,7 +29,7 @@
 
 {% if belege %}
 <div class="scroll"><table>
-  <thead><tr><th>Typ</th><th>Nummer</th><th>Datum</th><th>Kunde</th><th>Titel</th><th>Status</th><th>Projekt</th><th class="r">Netto</th><th class="r">Materialwert</th></tr></thead>
+  <thead><tr><th>Typ</th><th>Nummer</th><th>Datum</th><th>Kunde / Partner</th><th>Titel</th><th>Status</th><th>Projekt</th><th class="r">Netto</th><th class="r">Materialwert</th></tr></thead>
   <tbody>{% for d in belege %}<tr>
     <td><span class="chip">{{ BELEG_TYPEN.get(d.typ, d.typ) }}</span></td>
     <td><a href="{{ url_for('main.lex_beleg_detail', did=d.id) }}">{{ d.nummer or ('Beleg #' ~ d.id) }}</a></td>

@@ -45,8 +45,22 @@ BELEGE_LISTE = [
      "voucherDate": "2026-10-20T00:00:00.000+02:00", "updatedDate": "2026-10-20T10:00:00.000+02:00",
      "contactId": "00000000-0000-0000-0000-000000000001", "contactName": "Jäger Handling GmbH",
      "totalAmount": 1190.00, "currency": "EUR", "archived": False},
+    {"id": "doc-eingang-1", "voucherType": "purchaseinvoice", "voucherStatus": "open", "voucherNumber": "ER-2026-999",
+     "voucherDate": "2026-10-25T00:00:00.000+02:00", "updatedDate": "2026-10-25T10:00:00.000+02:00",
+     "contactId": "00000000-0000-0000-0000-000000000003", "contactName": "Rexel Germany GmbH & Co. KG",
+     "totalAmount": 595.00, "currency": "EUR", "archived": False},
 ]
 BELEGE_DETAILS = {
+    "doc-eingang-1": {
+        "id": "doc-eingang-1", "version": 1, "voucherNumber": "ER-2026-999", "voucherDate": "2026-10-25T00:00:00.000+02:00",
+        "voucherStatus": "open", "remark": "Kabel-Lieferung", "archived": False,
+        "contactId": "00000000-0000-0000-0000-000000000003", "contactName": "Rexel Germany GmbH & Co. KG",
+        "taxType": "net",
+        "totalNetAmount": 500.00, "totalGrossAmount": 595.00,
+        "voucherItems": [
+            {"amount": 500.00, "taxAmount": 95.00, "taxRatePercent": 19, "categoryId": "kat-kabel", "description": "Kabeltrommel NYM-J"}
+        ],
+    },
     "doc-ang-1": {
         "id": "doc-ang-1", "version": 1, "voucherNumber": "AG-2026-001", "voucherDate": "2026-10-15T00:00:00.000+02:00",
         "voucherStatus": "open", "title": "Neubau Halle 2", "archived": False,
@@ -105,10 +119,16 @@ class Lex(BaseHTTPRequestHandler):
         if u.path == "/v1/voucherlist":
             typen = set(q.get("voucherType", [""])[0].split(","))
             seite, groesse = int(q["page"][0]), int(q["size"][0])
+            d_from = q.get("voucherDateFrom", [None])[0]
+            d_to = q.get("voucherDateTo", [None])[0]
             alle = [b for b in STAND["belege"] if b["voucherType"] in typen]
+            if d_from:
+                alle = [b for b in alle if b["voucherDate"][:10] >= d_from]
+            if d_to:
+                alle = [b for b in alle if b["voucherDate"][:10] <= d_to]
             teil = alle[seite * groesse:(seite + 1) * groesse]; seiten = max(1, -(-len(alle) // groesse))
             return self._antwort(200, {"content": teil, "first": seite == 0, "last": seite >= seiten - 1, "totalPages": seiten, "totalElements": len(alle), "number": seite, "size": groesse})
-        for pre in ("/v1/quotations/", "/v1/order-confirmations/", "/v1/invoices/"):
+        for pre in ("/v1/quotations/", "/v1/order-confirmations/", "/v1/invoices/", "/v1/vouchers/"):
             if u.path.startswith(pre):
                 lid = u.path[len(pre):]
                 if lid in BELEGE_DETAILS:
@@ -254,6 +274,38 @@ assert "AG-2026-001" in G("/projekte?p=1&tab=lexoffice&status=alle")
 P("/projekte/1/bearbeiten", {"nummer": "P1", "name": "Audi", "kunde": "Jäger Handling AG", "status": "aktiv",
                              "budget_modus": "faktor", "budget_faktor": "1,10"})
 assert "1.320,00 €" in G("/projekte?p=1&tab=uebersicht&status=alle")
+
+# ---- Phase 3: Eingangsrechnungen (purchaseinvoice) & Jahr/Monat Filter
+speichern(lex_sync_eingangsrechnungen="1", lex_filter_jahr="2025")
+STAND["anfragen"].clear()
+h = P(SEITE + "/sync", {}, page=SEITE)
+# 2025 enthält keine Belege im Schein-Lexoffice
+assert "Belege: 0 neu" in h
+assert any(q.get("voucherDateFrom") == ["2025-01-01"] and q.get("voucherDateTo") == ["2025-12-31"] for p, q, a in STAND["anfragen"] if "/voucherlist" in p)
+
+# Nun Jahr 2026, Monat 10 abgleichen
+speichern(lex_sync_eingangsrechnungen="1", lex_filter_jahr="2026", lex_filter_monat="10")
+STAND["anfragen"].clear()
+h = P(SEITE + "/sync", {}, page=SEITE)
+assert "Belege: 1 neu" in h
+assert any(q.get("voucherDateFrom") == ["2026-10-01"] and q.get("voucherDateTo") == ["2026-10-31"] for p, q, a in STAND["anfragen"] if "/voucherlist" in p)
+with db() as s:
+    er = s.query(LexDocument).filter(LexDocument.lexoffice_id == "doc-eingang-1").one()
+    assert er.typ == "eingangsrechnung"
+    assert er.nummer == "ER-2026-999"
+    assert er.kunde_name == "Rexel Germany GmbH & Co. KG"
+    assert er.netto == Decimal("500.00")
+    assert er.brutto == Decimal("595.00")
+    assert len(er.items) == 1
+    assert er.items[0].bezeichnung == "Kabeltrommel NYM-J"
+    assert er.items[0].gesamt_netto == Decimal("500.00")
+    assert er.items[0].kostenart == "material"
+
+# Belegliste mit Filter nach Belegart und Jahr/Monat
+h = G("/lexoffice/belege?typ=eingangsrechnung&jahr=2026&monat=10")
+assert "ER-2026-999" in h and "Rexel Germany" in h
+h_leer = G("/lexoffice/belege?typ=eingangsrechnung&jahr=2024")
+assert "ER-2026-999" not in h_leer
 
 # ---- Rechte
 P("/einstellungen/benutzer/neu", {"username": "emma", "password": "passwort123", "role": "einkaeufer"}, page="/einstellungen/benutzer/neu")

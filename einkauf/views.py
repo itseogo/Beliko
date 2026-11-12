@@ -46,7 +46,12 @@ KOSTENARTEN = {
     "fremdleistung": "Fremdleistung (0 %)",
     "arbeit": "Arbeit (0 %)",
 }
-BELEG_TYPEN = {"angebot": "Angebot", "auftrag": "Auftrag / AB", "rechnung": "Rechnung"}
+BELEG_TYPEN = {
+    "angebot": "Angebot",
+    "auftrag": "Auftrag / AB",
+    "rechnung": "Ausgangsrechnung",
+    "eingangsrechnung": "Eingangsrechnung",
+}
 BELEG_STATUS = {
     "draft": "Entwurf", "open": "Offen", "accepted": "Angenommen", "rejected": "Abgelehnt",
     "paid": "Bezahlt", "paidoff": "Bezahlt", "overdue": "Überfällig", "voided": "Storniert",
@@ -1691,13 +1696,32 @@ LEX_OPTIONEN = [  # (Schlüssel, Titel, umgesetzt, Standard)
     ("lex_sync_archiviert", "Auch archivierte Kontakte übernehmen", True, False),
     ("lex_sync_angebote", "Angebote (für das Materialbudget im Projekt)", True, False),
     ("lex_sync_auftraege", "Aufträge / Auftragsbestätigungen", True, False),
-    ("lex_sync_rechnungen", "Rechnungen (für den Abgleich mit Bestellungen)", True, False),
+    ("lex_sync_rechnungen", "Ausgangsrechnungen", True, False),
+    ("lex_sync_eingangsrechnungen", "Eingangsrechnungen (Lieferantenbelege)", True, False),
 ]
 
 
 def _lex_zugang():
     key_enc = einstellungen.lesen(g.db, "lex_key_enc")
     return einstellungen.lesen(g.db, "lex_url", lexoffice.BASIS), (security.decrypt(key_enc) if key_enc else "")
+
+
+def _lex_zeitraum(jahr_str, monat_str, ab_str, bis_str):
+    """Berechnet datum_ab und datum_bis aus Jahr/Monat oder freien Datumsgrenzen."""
+    import calendar
+    datum_ab = (ab_str or "").strip() or None
+    datum_bis = (bis_str or "").strip() or None
+    if jahr_str and str(jahr_str).isdigit():
+        j = int(jahr_str)
+        if monat_str and str(monat_str).isdigit() and 1 <= int(monat_str) <= 12:
+            m = int(monat_str)
+            last_day = calendar.monthrange(j, m)[1]
+            datum_ab = f"{j:04d}-{m:02d}-01"
+            datum_bis = f"{j:04d}-{m:02d}-{last_day:02d}"
+        else:
+            datum_ab = f"{j:04d}-01-01"
+            datum_bis = f"{j:04d}-12-31"
+    return datum_ab, datum_bis
 
 
 @main.route("/einstellungen/lexoffice", methods=["GET", "POST"], endpoint="lexoffice")
@@ -1721,6 +1745,12 @@ def lexoffice_seite():
                     einstellungen.schreiben(g.db, schluessel, "1" if request.form.get(schluessel) == "1" else "0")
             ab = (request.form.get("lex_belege_ab") or "").strip()
             einstellungen.schreiben(g.db, "lex_belege_ab", ab if re.match(r"^\d{4}-\d{2}-\d{2}$", ab) else "")
+            bis = (request.form.get("lex_belege_bis") or "").strip()
+            einstellungen.schreiben(g.db, "lex_belege_bis", bis if re.match(r"^\d{4}-\d{2}-\d{2}$", bis) else "")
+            fj = (request.form.get("lex_filter_jahr") or "").strip()
+            einstellungen.schreiben(g.db, "lex_filter_jahr", fj if re.match(r"^\d{4}$", fj) else "")
+            fm = (request.form.get("lex_filter_monat") or "").strip()
+            einstellungen.schreiben(g.db, "lex_filter_monat", fm if fm in [str(i) for i in range(1, 13)] else "")
             g.db.commit()
             flash("Lexoffice-Einstellungen gespeichert.", "ok")
             return redirect(url_for("main.lexoffice"))
@@ -1732,11 +1762,17 @@ def lexoffice_seite():
     optionen = [{"key": k, "titel": t, "umgesetzt": u, "an": einstellungen.an(g.db, k, std) if u else False}
                 for k, t, u, std in LEX_OPTIONEN]
     belege_anz = {t: g.db.query(LexDocument).filter(LexDocument.typ == t).count() for t in BELEG_TYPEN}
+    aktuelles_jahr = date.today().year
+    jahre = list(range(aktuelles_jahr + 1, aktuelles_jahr - 7, -1))
     return render_template(
         "lexoffice.html", fehler=fehler, aktiv=einstellungen.an(g.db, "lex_aktiv"),
         url=einstellungen.lesen(g.db, "lex_url", lexoffice.BASIS), hat_key=bool(einstellungen.lesen(g.db, "lex_key_enc")),
         optionen=optionen, letzter=letzter,
+        filter_jahr=einstellungen.lesen(g.db, "lex_filter_jahr", ""),
+        filter_monat=einstellungen.lesen(g.db, "lex_filter_monat", ""),
         belege_ab=einstellungen.lesen(g.db, "lex_belege_ab", ""),
+        belege_bis=einstellungen.lesen(g.db, "lex_belege_bis", ""),
+        jahre=jahre, MONATE=MONATE,
         anzahl=g.db.query(Contact).filter(Contact.quelle == "lexoffice").count(),
         belege_anz=belege_anz)
 
@@ -1772,11 +1808,18 @@ def lexoffice_abgleichen():
         ang = einstellungen.an(g.db, "lex_sync_angebote", False)
         auf = einstellungen.an(g.db, "lex_sync_auftraege", False)
         rech = einstellungen.an(g.db, "lex_sync_rechnungen", False)
+        eingang = einstellungen.an(g.db, "lex_sync_eingangsrechnungen", False)
         belege_erg = None
-        if ang or auf or rech:
-            ab_datum = einstellungen.lesen(g.db, "lex_belege_ab", "")
+        if ang or auf or rech or eingang:
+            ab_datum, bis_datum = _lex_zeitraum(
+                einstellungen.lesen(g.db, "lex_filter_jahr", ""),
+                einstellungen.lesen(g.db, "lex_filter_monat", ""),
+                einstellungen.lesen(g.db, "lex_belege_ab", ""),
+                einstellungen.lesen(g.db, "lex_belege_bis", ""),
+            )
             belege_erg = lexoffice.belege_synchronisieren(
-                g.db, basis, key, angebote=ang, auftraege=auf, rechnungen=rech, datum_ab=(ab_datum or None))
+                g.db, basis, key, angebote=ang, auftraege=auf, rechnungen=rech,
+                eingangsrechnungen=eingang, datum_ab=ab_datum, datum_bis=bis_datum)
         einstellungen.schreiben(g.db, "lex_letzter_sync", json.dumps({
             "zeit": jetzt, "ergebnis": erg, "belege": belege_erg, "fehler": None}))
         g.db.commit()
@@ -1801,6 +1844,8 @@ def lex_belege():
     typ = request.args.get("typ", "alle")
     projekt = request.args.get("projekt", "alle")
     suche = (request.args.get("q") or "").strip()
+    jahr = request.args.get("jahr", "alle")
+    monat = request.args.get("monat", "alle")
     q = g.db.query(LexDocument).options(
         joinedload(LexDocument.project),
         selectinload(LexDocument.items),
@@ -1811,10 +1856,17 @@ def lex_belege():
         q = q.filter(LexDocument.project_id.is_(None))
     elif projekt == "mit":
         q = q.filter(LexDocument.project_id.isnot(None))
+    if jahr.isdigit():
+        q = q.filter(extract("year", LexDocument.datum) == int(jahr))
+    if monat.isdigit() and 1 <= int(monat) <= 12:
+        q = q.filter(extract("month", LexDocument.datum) == int(monat))
     if suche:
         like = f"%{suche}%"
         q = q.filter(or_(LexDocument.nummer.like(like), LexDocument.kunde_name.like(like), LexDocument.titel.like(like)))
+    aktuelles_jahr = date.today().year
+    jahre = list(range(aktuelles_jahr + 1, aktuelles_jahr - 7, -1))
     return render_template("lex_belege.html", belege=q.all(), typ=typ, projekt=projekt, suche=suche,
+                           jahr=jahr, monat=monat, jahre=jahre, MONATE=MONATE,
                            BELEG_TYPEN=BELEG_TYPEN, BELEG_STATUS=BELEG_STATUS)
 
 
