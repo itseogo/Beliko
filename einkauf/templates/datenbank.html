@@ -1,0 +1,54 @@
+{% extends 'base.html' %}{% from '_m.html' import csrf, field with context %}{% block title %}Datenbank{% endblock %}
+{% block content %}
+<div class="kopf"><h1>Einstellungen</h1></div>
+<div class="tabs">
+  <a href="{{ url_for('main.lieferanten') }}">Lieferanten</a>
+  <a href="{{ url_for('main.benutzer') }}">Benutzer</a>
+  <a href="{{ url_for('main.nummernkreise') }}">Nummernkreise</a>
+  <a href="{{ url_for('main.lexoffice') }}">Lexoffice</a>
+  <a class="on" href="{{ url_for('main.einstellungen_datenbank') }}">Datenbank</a>
+</div>
+
+<p class="meta">Hier kannst du die Datenbankverbindung für BeLiKo einsehen und anpassen (z. B. bei geänderter IP des NAS, neuem Passwort oder Umzug). Änderungen werden sofort geprüft, die Datenbank migriert und in <code>config.json</code> gespeichert.</p>
+
+{% if fehler %}<div class="flash fehler">{{ fehler }}</div>{% endif %}
+
+<form method="post" class="panel">
+  {{ csrf() }}
+  <h3>Datenbank-Verbindung</h3>
+  <label class="f"><span>Typ</span>
+    <select name="type" id="typ">
+      <option value="mariadb" {{ 'selected' if form.type == 'mariadb' }}>MariaDB / MySQL auf dem NAS (empfohlen)</option>
+      <option value="sqlite" {{ 'selected' if form.type == 'sqlite' }}>Lokale Datei (SQLite, nur zum Testen)</option>
+    </select>
+  </label>
+  <div id="maria" class="grid2">
+    {{ field('Host / IP des NAS', 'host', form.host, hint='z. B. 192.168.1.20') }}
+    {{ field('Port', 'port', form.port or '3306', mode='numeric', hint='Standard: 3306') }}
+    {{ field('Datenbankname', 'name', form.name, hint='z. B. einkauf') }}
+    {{ field('Benutzer', 'user', form.user, hint='z. B. einkauf') }}
+    <label class="f"><span>Passwort</span>
+      <input type="password" name="password" autocomplete="new-password" placeholder="{{ 'gespeichert (zum Ändern neu eingeben)' if form.hat_password else 'Passwort eingeben' }}">
+      <small>Wird bei leerem Feld unverändert beibehalten.</small>
+    </label>
+  </div>
+  <p class="meta" id="sqlite-hinweis">Die SQLite-Datei liegt unter <code>{{ sqlite_pfad }}</code>.</p>
+  <div class="actions">
+    <button class="btn">Prüfen und speichern</button>
+  </div>
+</form>
+
+<script>
+const t = document.getElementById('typ');
+const m = document.getElementById('maria');
+const sHinweis = document.getElementById('sqlite-hinweis');
+function updateForm() {
+  const isSqlite = t.value === 'sqlite';
+  m.style.display = isSqlite ? 'none' : 'grid';
+  sHinweis.style.display = isSqlite ? 'block' : 'none';
+}
+t.onchange = updateForm;
+updateForm();
+</script>
+{% endblock %}
+

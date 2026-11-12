@@ -1,7 +1,7 @@
 {% extends 'base.html' %}{% block title %}Lieferanten{% endblock %}
 {% block content %}
 <div class="kopf"><h1>Einstellungen</h1><a class="btn" href="{{ url_for('main.lieferant_neu') }}">Lieferant anlegen</a></div>
-<div class="tabs"><a class="on" href="{{ url_for('main.lieferanten') }}">Lieferanten</a><a href="{{ url_for('main.benutzer') }}">Benutzer</a><a href="{{ url_for('main.nummernkreise') }}">Nummernkreise</a><a href="{{ url_for('main.lexoffice') }}">Lexoffice</a></div>
+<div class="tabs"><a class="on" href="{{ url_for('main.lieferanten') }}">Lieferanten</a><a href="{{ url_for('main.benutzer') }}">Benutzer</a><a href="{{ url_for('main.nummernkreise') }}">Nummernkreise</a><a href="{{ url_for('main.lexoffice') }}">Lexoffice</a><a href="{{ url_for('main.einstellungen_datenbank') }}">Datenbank</a></div>
 {% if liste %}
 <div class="scroll"><table>
 <thead><tr><th>Name</th><th>Kundennr.</th><th>Ansprechpartner</th><th>Telefon</th><th>UGL-Schnittstelle</th><th>Status</th></tr></thead>

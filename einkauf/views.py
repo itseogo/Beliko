@@ -2016,6 +2016,59 @@ def rechnung_zuordnen(rid):
     return redirect(url_for("main.rechnungen"))
 
 
+@main.route("/einstellungen/datenbank", methods=["GET", "POST"])
+@admin_required
+def einstellungen_datenbank():
+    cfg = current_app.extensions["cfg"]
+    db_aktuell = cfg.get("db") or {"type": "sqlite"}
+    form = {
+        "type": db_aktuell.get("type", "mariadb"),
+        "host": db_aktuell.get("host", ""),
+        "port": str(db_aktuell.get("port") or "3306"),
+        "name": db_aktuell.get("name", "einkauf"),
+        "user": db_aktuell.get("user", ""),
+        "hat_password": bool(db_aktuell.get("password")),
+    }
+    fehler = None
+    if request.method == "POST":
+        neu_typ = request.form.get("type") or "mariadb"
+        neu_form = {
+            "type": neu_typ,
+            "host": (request.form.get("host") or "").strip(),
+            "port": (request.form.get("port") or "3306").strip(),
+            "name": (request.form.get("name") or "").strip(),
+            "user": (request.form.get("user") or "").strip(),
+            "password": request.form.get("password") or (db_aktuell.get("password") if neu_typ == db_aktuell.get("type") else ""),
+        }
+        try:
+            if neu_typ == "mariadb":
+                if not (neu_form["host"] and neu_form["name"] and neu_form["user"]):
+                    raise ValueError("Bitte Host, Datenbankname und Benutzer angeben.")
+                int(neu_form["port"])
+            db.test_connection(neu_form)
+            # Verbindung erfolgreich -> initialisieren & Engine/Session neu anlegen
+            db.init_db(current_app, neu_form)
+            cfg["db"] = neu_form
+            config.save(cfg)
+            protokoll("geaendert", "system", details=f"Datenbankverbindung geändert auf {neu_typ}")
+            with current_app.extensions["SessionLocal"]() as s:
+                s.commit()
+            flash("Datenbankverbindung erfolgreich geprüft und gespeichert.", "ok")
+            return redirect(url_for("main.einstellungen_datenbank"))
+        except Exception as e:
+            fehler = f"Verbindung fehlgeschlagen: {e}"
+            form = {
+                "type": neu_typ,
+                "host": neu_form["host"],
+                "port": neu_form["port"],
+                "name": neu_form["name"],
+                "user": neu_form["user"],
+                "hat_password": bool(neu_form["password"]),
+            }
+    return render_template("datenbank.html", form=form, fehler=fehler,
+                           sqlite_pfad=str(config.DATA_DIR / "einkauf.db"))
+
+
 @main.route("/einstellungen/protokoll")
 @admin_required
 def einstellungen_protokoll():

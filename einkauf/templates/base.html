@@ -68,6 +68,7 @@
       <a class="t-item {{ 'on' if ep.startswith('main.benutzer') }}" href="{{ url_for('main.benutzer') }}">Benutzer</a>
       <a class="t-item {{ 'on' if ep == 'main.nummernkreise' }}" href="{{ url_for('main.nummernkreise') }}">Nummernkreise</a>
       <a class="t-item {{ 'on' if ep.startswith('main.lexoffice') }}" href="{{ url_for('main.lexoffice') }}">Lexoffice</a>
+      <a class="t-item {{ 'on' if ep == 'main.einstellungen_datenbank' }}" href="{{ url_for('main.einstellungen_datenbank') }}">Datenbank</a>
       <a class="t-item {{ 'on' if ep == 'main.einstellungen_protokoll' }}" href="{{ url_for('main.einstellungen_protokoll') }}">Protokoll &amp; Sperren</a>
       <a class="t-item {{ 'on' if ep.startswith('main.einstellungen_sicherung') }}" href="{{ url_for('main.einstellungen_sicherung') }}">Datensicherung</a>
     </details>

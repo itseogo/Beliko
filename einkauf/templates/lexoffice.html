@@ -1,7 +1,7 @@
 {% extends 'base.html' %}{% from '_m.html' import csrf with context %}{% block title %}Lexoffice{% endblock %}
 {% block content %}
 <div class="kopf"><h1>Einstellungen</h1></div>
-<div class="tabs"><a href="{{ url_for('main.lieferanten') }}">Lieferanten</a><a href="{{ url_for('main.benutzer') }}">Benutzer</a><a href="{{ url_for('main.nummernkreise') }}">Nummernkreise</a><a class="on" href="{{ url_for('main.lexoffice') }}">Lexoffice</a></div>
+<div class="tabs"><a href="{{ url_for('main.lieferanten') }}">Lieferanten</a><a href="{{ url_for('main.benutzer') }}">Benutzer</a><a href="{{ url_for('main.nummernkreise') }}">Nummernkreise</a><a class="on" href="{{ url_for('main.lexoffice') }}">Lexoffice</a><a href="{{ url_for('main.einstellungen_datenbank') }}">Datenbank</a></div>
 <p class="meta">Verbindung zu Lexoffice (Lexware Office). Der Abgleich läuft in <b>eine Richtung: von Lexoffice nach BeLiKo</b> und nur lesend. Es wird nichts in Lexoffice verändert. Aus Lexoffice übernommene Kontakte sind in BeLiKo schreibgeschützt, selbst angelegte bleiben unberührt.</p>
 {% if fehler %}<div class="flash fehler">{{ fehler }}</div>{% endif %}
 
