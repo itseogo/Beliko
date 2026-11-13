@@ -25,19 +25,26 @@
   <td>{{ q.kunde or '' }}</td><td>{{ STATUS[q.status] }}</td>
   <td class="r">{{ s.offen }}</td><td class="r">{{ s.bestellt|money }}</td>
   <td class="r">{% if s.budget is not none %}{{ s.budget|money }}{% if s.prozent is not none %} <span class="chip {{ 'ueberfaellig' if s.prozent > 100 else ('bald' if s.prozent >= 80 else 'ok') }}">{{ s.prozent }} %</span>{% endif %}{% else %}–{% endif %}</td>
-  <td class="r" onclick="event.stopPropagation()">
+  <td class="r" onclick="event.stopPropagation()" style="white-space:nowrap">
     {% if g.user.role != 'leser' %}
-    <form method="post" action="{{ url_for('main.projekt_loeschen', pid=q.id) }}" onsubmit="event.stopPropagation(); return confirm('Möchtest du das Projekt „{{ q.nummer }} · {{ q.name }}“ wirklich löschen?')" style="display:inline;margin:0">
-      {{ csrf() }}
-      <button type="submit" class="link-b" style="padding:.25rem .4rem;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;color:var(--red)" title="Projekt löschen" aria-label="Projekt löschen">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <polyline points="3 6 5 6 21 6"></polyline>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          <line x1="10" y1="11" x2="10" y2="17"></line>
-          <line x1="14" y1="11" x2="14" y2="17"></line>
+    <div style="display:inline-flex;gap:.35rem;align-items:center;justify-content:flex-end">
+      <a href="{{ url_for('main.projekt_bearbeiten', pid=q.id) }}" class="btn sek" style="padding:.25rem .45rem;border-radius:4px;display:inline-flex;align-items:center;justify-content:center" title="Projekt bearbeiten" aria-label="Projekt bearbeiten">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
         </svg>
-      </button>
-    </form>
+      </a>
+      <form method="post" action="{{ url_for('main.projekt_loeschen', pid=q.id) }}" onsubmit="event.stopPropagation(); return confirm('Möchtest du das Projekt „{{ q.nummer }} · {{ q.name }}“ wirklich löschen?')" style="display:inline;margin:0">
+        {{ csrf() }}
+        <button type="submit" class="link-b" style="padding:.25rem .45rem;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;color:var(--red)" title="Projekt löschen" aria-label="Projekt löschen">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+        </button>
+      </form>
+    </div>
     {% endif %}
   </td>
 </tr>
@@ -53,10 +60,23 @@
   <p class="meta">{% if p.contact_id %}<a href="{{ url_for('main.kontakt_detail', cid=p.contact_id) }}">{{ p.kunde }}</a>{% else %}{{ p.kunde or 'Kein Kunde angegeben' }}{% endif %} · {{ STATUS[p.status] }}</p></div>
   {% if g.user.role != 'leser' %}
   <div style="display:flex;gap:.5rem;align-items:center">
-    <a class="btn sek" href="{{ url_for('main.projekt_bearbeiten', pid=p.id) }}">Bearbeiten</a>
+    <a class="btn sek" href="{{ url_for('main.projekt_bearbeiten', pid=p.id) }}" style="display:inline-flex;align-items:center;gap:.35rem">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+      </svg>
+      Bearbeiten
+    </a>
     <form method="post" action="{{ url_for('main.projekt_loeschen', pid=p.id) }}" onsubmit="return confirm('Möchtest du das Projekt „{{ p.nummer }} · {{ p.name }}“ wirklich löschen?')" style="margin:0">
       {{ csrf() }}
-      <button class="btn gefahr">Projekt löschen</button>
+      <button class="btn gefahr" style="display:inline-flex;align-items:center;gap:.35rem">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          <line x1="10" y1="11" x2="10" y2="17"></line>
+          <line x1="14" y1="11" x2="14" y2="17"></line>
+        </svg>
+        Projekt löschen
+      </button>
     </form>
   </div>
   {% endif %}</div>
