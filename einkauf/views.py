@@ -2271,13 +2271,18 @@ def einstellungen_datenbank():
                 int(neu_form["port"])
             db.test_connection(neu_form)
             # Verbindung erfolgreich -> initialisieren & Engine/Session neu anlegen
+            alt_engine = current_app.extensions.get("engine")
             db.init_db(current_app, neu_form)
+            kopiert_anzahl = None
+            if request.form.get("daten_uebertragen") == "1" and alt_engine:
+                kopiert_anzahl = db.daten_kopieren(alt_engine, current_app.extensions["engine"])
             cfg["db"] = neu_form
             config.save(cfg)
             protokoll("geaendert", "system", details=f"Datenbankverbindung geändert auf {neu_typ}")
             with current_app.extensions["SessionLocal"]() as s:
                 s.commit()
-            flash("Datenbankverbindung erfolgreich geprüft und gespeichert.", "ok")
+            hinweis = f" ({kopiert_anzahl} Datensätze übertragen)" if kopiert_anzahl is not None else ""
+            flash(f"Datenbankverbindung erfolgreich geprüft und gespeichert{hinweis}.", "ok")
             return redirect(url_for("main.einstellungen_datenbank"))
         except Exception as e:
             fehler = f"Verbindung fehlgeschlagen: {e}"

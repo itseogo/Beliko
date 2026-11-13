@@ -33,7 +33,14 @@
     </label>
   </div>
   <p class="meta" id="sqlite-hinweis">Die SQLite-Datei liegt unter <code>{{ sqlite_pfad }}</code>.</p>
-  <div class="actions">
+  <div id="maria-transfer" style="margin-top:1rem">
+    <label class="check">
+      <input type="checkbox" name="daten_uebertragen" value="1" checked>
+      Vorhandene Daten (Benutzer, Projekte, Bestellungen etc.) aus bisheriger Datenbank in die neue MariaDB übertragen
+    </label>
+    <small class="meta" style="display:block;margin-left:1.5rem">Kopiert alle vorhandenen Daten automatisch in die MariaDB, sodass Benutzerzugänge und Arbeitsstände erhalten bleiben.</small>
+  </div>
+  <div class="actions" style="margin-top:1rem">
     <button class="btn">Prüfen und speichern</button>
   </div>
 </form>
@@ -42,10 +49,12 @@
 const t = document.getElementById('typ');
 const m = document.getElementById('maria');
 const sHinweis = document.getElementById('sqlite-hinweis');
+const mTransfer = document.getElementById('maria-transfer');
 function updateForm() {
   const isSqlite = t.value === 'sqlite';
   m.style.display = isSqlite ? 'none' : 'grid';
   sHinweis.style.display = isSqlite ? 'block' : 'none';
+  mTransfer.style.display = isSqlite ? 'none' : 'block';
 }
 t.onchange = updateForm;
 updateForm();

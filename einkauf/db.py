@@ -114,3 +114,9 @@ def test_connection(dbcfg):
             conn.execute(text("SELECT 1"))
     finally:
         engine.dispose()
+
+
+def daten_kopieren(src_engine, dst_engine):
+    """Kopiert alle Daten aus src_engine in dst_engine (z. B. SQLite nach MariaDB)."""
+    from .datenbank_kopieren import daten_kopieren as _kopieren
+    return _kopieren(src_engine, dst_engine, verbose=False)
