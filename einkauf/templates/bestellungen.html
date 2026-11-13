@@ -9,7 +9,7 @@
 {% if not status %}<p class="meta">Zeigt alles außer abgeschlossenen (bezahlten) Bestellungen. Die Ordner links gliedern nach Status und Datum.</p>{% endif %}
 {% if bestellungen %}
 <div class="scroll"><table>
-<thead><tr><th>Datum</th><th>Bestellnr.</th><th>Lieferant</th><th>Projekt</th><th class="r">Positionen</th><th class="r">Summe netto</th><th>Status</th></tr></thead>
+<thead><tr><th>Datum</th><th>Bestellnr.</th><th>Lieferant</th><th>Projekt</th><th class="r">Positionen</th><th class="r">Summe netto</th><th>Status</th><th></th></tr></thead>
 <tbody>{% for o in bestellungen %}
 {% set pr = [] %}{% for i in o.items %}{% if i.project and i.project.nummer not in pr %}{% set _ = pr.append(i.project.nummer) %}{% endif %}{% endfor %}
 <tr><td>{{ o.bestelldatum|datum }}</td>
@@ -17,6 +17,15 @@
 <td>{{ o.supplier.name }}</td>
 <td>{{ pr|join(', ') or '–' }}</td>
 <td class="r">{{ o.items|length }}</td><td class="r">{{ o.summe|money }}</td>
-<td><span class="chip s-{{ o.status }}">{{ BEST_KURZ[o.status] }}</span></td></tr>{% endfor %}</tbody></table></div>
+<td><span class="chip s-{{ o.status }}">{{ BEST_KURZ[o.status] }}</span></td>
+<td class="r" style="white-space:nowrap">
+  {% if g.user.role != 'leser' %}
+  <form method="post" action="{{ url_for('main.bestellung_loeschen', oid=o.id) }}" onsubmit="return confirm('Möchtest du die Bestellung „{{ o.bestellnr or ('Nr. ' ~ o.id) }}“ ({{ o.supplier.name }}) wirklich löschen?')" style="display:inline;margin:0">
+    {{ csrf() }}
+    <button class="link-b" style="padding:.2rem .4rem;font-size:.82rem" title="Bestellung löschen">Löschen</button>
+  </form>
+  {% endif %}
+</td>
+</tr>{% endfor %}</tbody></table></div>
 {% else %}<p class="leer">Keine Bestellungen in diesem Ordner.</p>{% endif %}
 {% endblock %}

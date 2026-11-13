@@ -103,4 +103,15 @@ h_del = P("/projekte/2/loeschen", {}, page="/projekte?p=2")
 assert "Aumann Schaltschrank gelöscht" in h_del
 assert "Aumann Schaltschrank" not in G("/projekte")
 
+# Bestellung löschen testen
+h_best = G("/bestellungen")
+assert "Löschen" in h_best
+h_bdetail = G("/bestellungen/2")
+assert "Bestellung löschen" in h_bdetail
+
+# Bestellung 2 löschen
+h_bdel = P("/bestellungen/2/loeschen", {}, page="/bestellungen/2")
+assert "gelöscht" in h_bdel
+assert "/bestellungen/2" not in G("/bestellungen")
+
 print("NEUE FUNKTIONEN OK")

@@ -5,7 +5,15 @@
 {% else %}<p class="krumen"><a href="{{ url_for('main.bestellungen') }}">← Zurück zu den Bestellungen</a></p>{% endif %}
 <div class="kopf"><div><h1>{{ o.supplier.name }}</h1>
 <p class="meta">Bestellt am {{ o.bestelldatum|datum }}{% if o.bestellnr %} · Bestellnr. {{ o.bestellnr }}{% endif %}{% if o.ab_nr %} · AB {{ o.ab_nr }}{% endif %}{% if o.wunschtermin %} · Wunschtermin {{ o.wunschtermin|datum }}{% endif %} · Summe {{ o.summe|money }} netto</p></div>
-<a class="btn sek" href="{{ url_for('main.bestellung_ugl_export', oid=o.id) }}">UGL-Datei herunterladen</a></div>
+<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+  <a class="btn sek" href="{{ url_for('main.bestellung_ugl_export', oid=o.id) }}">UGL-Datei herunterladen</a>
+  {% if bearbeiten %}
+  <form method="post" action="{{ url_for('main.bestellung_loeschen', oid=o.id) }}" onsubmit="return confirm('Möchtest du die Bestellung „{{ o.bestellnr or ('Nr. ' ~ o.id) }}“ ({{ o.supplier.name }}) wirklich löschen?')" style="margin:0">
+    {{ csrf() }}
+    <button class="btn gefahr">Bestellung löschen</button>
+  </form>
+  {% endif %}
+</div></div>
 <div class="statusleiste">
   <span class="chip s-{{ o.status }}">{{ BEST_STATUS[o.status] }}</span>
   {% if o.bestellt_am %}<span class="meta">bestellt am {{ o.bestellt_am|datum }}</span>{% endif %}

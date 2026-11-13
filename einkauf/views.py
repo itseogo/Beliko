@@ -932,6 +932,38 @@ def bestellung_status(oid):
     return redirect(url_for("main.bestellung_detail", oid=oid))
 
 
+@main.route("/bestellungen/<int:oid>/loeschen", methods=["POST"])
+@edit_required
+def bestellung_loeschen(oid):
+    o = g.db.get(Order, oid) or abort(404)
+    ok, lock = sperre.holen(g.db, "bestellung", oid, g.user)
+    if not ok:
+        flash(sperre.meldung("bestellung", lock), "fehler")
+        return redirect(url_for("main.bestellung_detail", oid=oid))
+
+    nr = o.bestellnr or f"Nr. {o.id}"
+    sup_name = o.supplier.name if o.supplier else "Lieferant"
+
+    # Verknüpfte Rechnungen und Lieferantendateien lösen
+    for inv in g.db.query(SupplierInvoice).filter(SupplierInvoice.order_id == o.id).all():
+        inv.order_id = None
+        inv.status = "offen"
+    for sf in g.db.query(SupplierFile).filter(SupplierFile.bestell_id == o.id).all():
+        sf.bestell_id = None
+
+    # Zuerst Lieferungen & Lieferscheinpositionen löschen
+    for d in list(o.deliveries):
+        g.db.delete(d)
+    g.db.flush()
+
+    sperre.freigeben(g.db, "bestellung", oid, g.user)
+    g.db.delete(o)
+    protokoll("geloescht", "bestellung", oid, f"{nr} · {sup_name}")
+    g.db.commit()
+    flash(f"Bestellung {nr} ({sup_name}) gelöscht.", "ok")
+    return redirect(url_for("main.bestellungen"))
+
+
 @main.route("/bestellungen/<int:oid>/termin", methods=["POST"])
 @edit_required
 def termin_setzen(oid):
