@@ -46,6 +46,9 @@
         {% for pr in projekte %}<option value="{{ pr.id }}" {{ 'selected' if doc.project_id == pr.id }}>{{ pr.nummer }} · {{ pr.name }}{% if pr.kunde %} ({{ pr.kunde }}){% endif %}</option>{% endfor %}
       </select>
     </label>
+    {% if not doc.project_id and doc.typ == 'angebot' and g.user.role != 'leser' %}
+    <a class="btn sek" style="margin-bottom:.9rem" href="{{ url_for('main.projekt_neu', angebot_id=doc.id) }}">+ Neues Projekt aus diesem Angebot anlegen</a>
+    {% endif %}
   </div>
 
   {% if doc.items %}

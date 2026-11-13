@@ -37,7 +37,7 @@
     <td>{% if d.contact_id %}<a href="{{ url_for('main.kontakt_detail', cid=d.contact_id) }}">{{ d.kunde_name or '–' }}</a>{% else %}{{ d.kunde_name or '–' }}{% endif %}</td>
     <td>{{ d.titel or '–' }}</td>
     <td>{{ BELEG_STATUS.get(d.status, d.status or '–') }}</td>
-    <td>{% if d.project %}<a href="{{ url_for('main.projekte', p=d.project.id, tab='lexoffice', status='alle') }}">{{ d.project.nummer }} · {{ d.project.name }}</a>{% else %}<span class="meta">–</span>{% endif %}</td>
+    <td>{% if d.project %}<a href="{{ url_for('main.projekte', p=d.project.id, tab='lexoffice', status='alle') }}">{{ d.project.nummer }} · {{ d.project.name }}</a>{% elif d.typ == 'angebot' and g.user.role != 'leser' %}<a class="btn sek" style="padding:.15rem .5rem;font-size:.78rem;white-space:nowrap" href="{{ url_for('main.projekt_neu', angebot_id=d.id) }}">+ Projekt anlegen</a>{% else %}<span class="meta">–</span>{% endif %}</td>
     <td class="r">{{ d.netto|money if d.netto is not none else '–' }}</td>
     <td class="r">{{ d.materialwert|money }}{% if d.unklar_anzahl %} <span class="chip bald">{{ d.unklar_anzahl }} unklar</span>{% endif %}</td>
   </tr>{% endfor %}</tbody>

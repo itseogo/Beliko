@@ -148,6 +148,8 @@ b.vorschau{font-size:1.15rem;background:var(--hover);padding:.1rem .5rem;border-
 .flash.warn{background:var(--amber-bg);border-color:var(--amber-line)}
 
 /* Nummernkreise: Vorschau */
+dialog{border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);max-width:52rem;width:95vw;padding:1.25rem;box-shadow:0 12px 35px rgba(0,0,0,0.45)}
+dialog::backdrop{background:rgba(0,0,0,0.55);backdrop-filter:blur(2px)}
 .vorschau-zeile{margin:.2rem 0 .4rem;font-size:1.05rem}
 b.vorschau{font-size:1.4rem;letter-spacing:.03em;background:var(--hover);padding:.15rem .6rem;border-radius:5px;font-variant-numeric:tabular-nums}
 .meldung{color:var(--red);min-height:1.3rem;margin:.1rem 0 .6rem;font-size:.92rem}

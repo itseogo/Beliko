@@ -534,6 +534,14 @@ def _projekt_speichern(p):
 def projekt_neu():
     p = Project(status="aktiv", budget_modus="manuell", budget_faktor=Decimal("1.000"))
     fehler = None
+    angebote = (g.db.query(LexDocument).options(joinedload(LexDocument.project))
+                .filter(LexDocument.typ == "angebot", LexDocument.archiviert.is_(False))
+                .order_by(LexDocument.datum.desc(), LexDocument.id.desc())
+                .all())
+    angebote.sort(key=lambda a: (a.project_id is not None, -(a.datum.toordinal() if a.datum else 0)))
+    v_angebot_id = request.values.get("lex_angebot_id", type=int) or request.args.get("angebot_id", type=int) or request.args.get("angebot", type=int)
+    gewaehltes_angebot = g.db.get(LexDocument, v_angebot_id) if v_angebot_id else None
+
     if request.method == "POST":
         fehler = _projekt_speichern(p)
         if not fehler:
@@ -541,14 +549,32 @@ def projekt_neu():
             nummern.verbrauchen(g.db, "projekt", p.nummer)
             g.db.flush()
             protokoll("angelegt", "projekt", p.id, f"{p.nummer} · {p.name}")
+            aid = request.form.get("lex_angebot_id", type=int)
+            if aid:
+                doc = g.db.get(LexDocument, aid)
+                if doc and doc.typ == "angebot":
+                    doc.project_id = p.id
+                    protokoll("zugeordnet", "lex_beleg", doc.id, doc.nummer, details=f"Projekt {p.nummer}")
             g.db.commit()
             flash("Projekt angelegt.", "ok")
             return redirect(url_for("main.projekte", p=p.id, status="alle"))
     else:
         p.nummer = nummern.vorschlag(g.db, "projekt", _projekt_nummer_vorhanden)
+        if gewaehltes_angebot:
+            if gewaehltes_angebot.titel:
+                p.name = gewaehltes_angebot.titel
+            elif gewaehltes_angebot.nummer:
+                p.name = gewaehltes_angebot.nummer
+            if gewaehltes_angebot.kunde_name:
+                p.kunde = gewaehltes_angebot.kunde_name
+                treffer = _kunde_aufloesen(gewaehltes_angebot.kunde_name)
+                p.contact_id = treffer.id if treffer else gewaehltes_angebot.contact_id
+            p.budget_modus = "warensumme"
         g.db.commit()
     return render_template("projekt_form.html", p=p, fehler=fehler, status=STATUS, neu=True,
-                           kunden=_kunden_liste(), budget_modi=BUDGET_MODI)
+                           kunden=_kunden_liste(), budget_modi=BUDGET_MODI,
+                           angebote=angebote, gewaehltes_angebot=gewaehltes_angebot,
+                           lex_aktiv=einstellungen.an(g.db, "lex_aktiv"))
 
 
 @main.route("/projekte/<int:pid>")
@@ -567,6 +593,14 @@ def projekt_bearbeiten(pid):
         return redirect(url_for("main.projekte", p=p.id, status="alle"))
     g.db.commit()
     fehler = None
+    angebote = (g.db.query(LexDocument).options(joinedload(LexDocument.project))
+                .filter(LexDocument.typ == "angebot", LexDocument.archiviert.is_(False))
+                .filter(or_(LexDocument.project_id.is_(None), LexDocument.project_id == pid))
+                .order_by(LexDocument.datum.desc(), LexDocument.id.desc())
+                .all())
+    angebote.sort(key=lambda a: (a.project_id != pid, -(a.datum.toordinal() if a.datum else 0)))
+    gewaehltes_angebot = next((a for a in p.lex_documents if a.typ == "angebot"), None)
+
     if request.method == "POST":
         form_ver = request.form.get("version", type=int)
         if form_ver is not None and form_ver != (p.version or 1):
@@ -577,11 +611,19 @@ def projekt_bearbeiten(pid):
                 p.version = (p.version or 1) + 1
                 sperre.freigeben(g.db, "projekt", pid, g.user)
                 protokoll("geaendert", "projekt", p.id, f"{p.nummer} · {p.name}")
+                aid = request.form.get("lex_angebot_id", type=int)
+                if aid:
+                    doc = g.db.get(LexDocument, aid)
+                    if doc and doc.typ == "angebot" and doc.project_id != p.id:
+                        doc.project_id = p.id
+                        protokoll("zugeordnet", "lex_beleg", doc.id, doc.nummer, details=f"Projekt {p.nummer}")
                 g.db.commit()
                 flash("Projekt gespeichert.", "ok")
                 return redirect(url_for("main.projekte", p=p.id, status="alle"))
     return render_template("projekt_form.html", p=p, fehler=fehler, status=STATUS, neu=False,
-                           kunden=_kunden_liste(), budget_modi=BUDGET_MODI)
+                           kunden=_kunden_liste(), budget_modi=BUDGET_MODI,
+                           angebote=angebote, gewaehltes_angebot=gewaehltes_angebot,
+                           lex_aktiv=einstellungen.an(g.db, "lex_aktiv"))
 
 
 @main.route("/projekte/<int:pid>/beleg-zuordnen", methods=["POST"])

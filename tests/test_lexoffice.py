@@ -307,6 +307,28 @@ assert "ER-2026-999" in h and "Rexel Germany" in h
 h_leer = G("/lexoffice/belege?typ=eingangsrechnung&jahr=2024")
 assert "ER-2026-999" not in h_leer
 
+# ---- Phase 4: Angebot direkt beim Projekt anlegen auswählen
+h_neu = G(f"/projekte/neu?angebot_id={ang_id}")
+assert "Lexoffice-Angebot auswählen" in h_neu
+assert "Angebot aus Lexoffice wählen" in h_neu
+assert "dialog-angebote" in h_neu
+assert "Neubau Halle 2" in h_neu and "Jäger Handling" in h_neu
+
+# Projekt anlegen mit ausgewähltem Angebot
+P("/projekte/neu", {
+    "nummer": "P-AUTO-1",
+    "name": "Halle 2 Übernahme",
+    "kunde": "Jäger Handling AG",
+    "status": "aktiv",
+    "budget_modus": "warensumme",
+    "budget_faktor": "1,00",
+    "lex_angebot_id": str(ang_id),
+})
+with db() as s:
+    proj = s.query(Project).filter(Project.nummer == "P-AUTO-1").one()
+    ang_check = s.get(LexDocument, ang_id)
+    assert ang_check.project_id == proj.id
+
 # ---- Rechte
 P("/einstellungen/benutzer/neu", {"username": "emma", "password": "passwort123", "role": "einkaeufer"}, page="/einstellungen/benutzer/neu")
 P("/einstellungen/benutzer/neu", {"username": "leo", "password": "passwort123", "role": "leser"}, page="/einstellungen/benutzer/neu")
