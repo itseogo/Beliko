@@ -3,7 +3,7 @@
 Webanwendung zur Überwachung von Einkauf, Bestellungen, Wareneingang und Projekten für einenHandwerksbetrieb.
 Entwickelt für den Betrieb auf einem **Raspberry Pi 4 (64-Bit)** im lokalen Netzwerk mit Datenbank **MariaDB auf dem NAS** (oder SQLite für lokale Testläufe).
 
-**Stand: Version 1.3.0 · Datenbank-Schemaversion 12**
+**Stand: Version 1.3.1 · Datenbank-Schemaversion 12**
 
 ---
 

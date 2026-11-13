@@ -4,7 +4,7 @@ Diese Datei gehört zum Projekt und wird bei **jeder Änderung** mit aktualisier
 damit in einem neuen Chat nahtlos weitergearbeitet werden kann). In einem neuen Chat: `beliko.zip`
 hochladen (enthält diese Datei) und sagen „lies die CLAUDE.md und mach weiter“.
 
-**Stand: Version 1.3.0 · Datenbank-Schemaversion 12**
+**Stand: Version 1.3.1 · Datenbank-Schemaversion 12**
 
 **Name:** Der Auftraggeber nennt das Tool **BeLiKo** (BestellLieferKontrolle). Sichtbar überall als BeLiKo; intern bleiben Paket `einkauf`, Ordner `einkauf-data` und der Dienstname `einkauf` (damit bestehende Installationen weiterlaufen). Auslieferung: `beliko.zip`.
 
@@ -31,7 +31,8 @@ run.py                    Start (python run.py) und "install-service" (systemd, 
 install.sh / install.bat  legt .venv an, installiert Pakete (Linux/Mac bzw. Windows); start.sh / start.bat starten
 einkauf/__init__.py       App-Fabrik, Filter (qty, money, datum), Setup-Sperre, Fehlerseiten, VERSION
 einkauf/config.py         einkauf-data/config.json (DB-Zugang, secret_key, Port, Firma)
-einkauf/db.py             init_db, migrate (Schema-Updates!), SCHEMA_VERSION
+einkauf/db.py             init_db, migrate (Schema-Updates!), SCHEMA_VERSION, daten_kopieren
+einkauf/datenbank_kopieren.py  Übertragung aller Daten SQLite ↔ MariaDB (CLI: python -m einkauf.datenbank_kopieren)
 einkauf/models.py         Tabellen und Geschäftslogik (Status, Rest, Fälligkeit)
 einkauf/security.py       Verschlüsselung, CSRF, Rollen-Dekoratoren, Login-Sperre
 einkauf/ugl.py            UGL-Dateileser und Abgleich mit Bestellpositionen
@@ -277,6 +278,13 @@ Echte Dateien des Lieferanten nicht ins Paket legen; `tests/make_ugl.py` baut ei
 - Spalten in bestehenden Datenbanken nur über `_spalten_ergaenzen` nachziehen (siehe Abschnitt 4).
 
 ## 10. Versionsverlauf
+- **1.3.1**
+  - **Passwörter:** Mindestlänge für Benutzer- und Admin-Passwörter von 8 auf **6 Zeichen** herabgesetzt (in `/setup`, `/konto`, `/einstellungen/benutzer`).
+  - **Projekte & Bestellungen löschen:** Stift-Icon (✏️) zum Bearbeiten und rotes Mülleimer-Icon (🗑️) zum Löschen (mit `confirm()`-Sicherheitsabfrage) direkt in den Zeilen von `/projekte` und `/bestellungen`; Lösch-Buttons mit Bestätigung auf Detailseiten.
+  - **Datenbank-Migration / Übertragungstool (SQLite → MariaDB):** `datenbank_kopieren.py` (Aufruf `python -m einkauf.datenbank_kopieren` zum Übertragen aller 20 Tabellen mit Foreign-Key-Bypass, `--zurueck-zu-sqlite` für schnellen Rollback) sowie automatische Übertragungs-Checkbox unter `/einstellungen/datenbank`.
+  - **Bearbeitungssperren:** Automatische Freigabe beim Schließen des Tabs / Verlassen der Seite via `pagehide` & Beacon (`navigator.sendBeacon` / `fetch keepalive`); verkürztes Timeout von 3 Minuten mit 45s-Heartbeat-Ping; Klick auf „Abbrechen“ oder „Zurück“ gibt Sperre sofort frei; neuer Button „Alle Sperren aufheben“ unter `/einstellungen/protokoll`.
+  - **Lieferscheinzuordnung & UGL:** Direktes Zuordnen abgerufener Lieferantendateien (`SupplierFile`) auf `/bestellungen/<id>` per Dropdown und Suchfenster (`🔍 Lieferschein auswählen …`); neue Spalte „Lieferschein & Lieferdatum“ in der Positionentabelle auf der Bestelldetailseite; FTP-Sofortabruf-Button.
+  - **Lexoffice:** Eingangsrechnungen (`purchaseinvoice`), Filter nach Jahr und Monat in der Belegliste `/lexoffice/belege`, automatische Vorbelegung von Kostenarten (`material` = 100 %, `service`/Arbeit = 0 %), Lexoffice-Angebot direkt beim Projekt anlegen übernehmbar.
 - **1.3.0** Bearbeitungssperre (`sperre.py`, `edit_locks`) mit Benutzer-Benachrichtigung beim Öffnen + Optimistic Locking (`version`) + Admin-Entsperrung; Änderungsprotokoll (`audit_logs`, `/einstellungen/protokoll`); Zähler „Positionen im Rückstand“ im Baum + Hinweise im Dashboard; UGL-Vorschau (Dateidatum/Belegdatum getrennt, Duplikat-Warnung) + UGL-Bestellexport (`ugl.schreiben`); Datanorm-Import (`datanorm.py`, `/artikel`); ZUGFeRD-Rechnungen (`zugferd.py`, `/rechnungen`); Datensicherung als ZIP (`/einstellungen/sicherung`) (Schema 12). Auf SQLite getestet, **nicht auf MariaDB / echtem Browser**.
 - **1.2.0** Lexoffice Phase 2: Abruf von Angeboten, Aufträgen und Rechnungen (`/v1/voucherlist` + Detailabruf), Belegübersicht `/lexoffice/belege`, Kostenarten je Position (`material`, `pauschale` mit %, `fremdleistung`, `arbeit`, `unklar`) mit Artikelregeln (`lex_article_rules`), Materialbudget-Modi (`manuell`, `warensumme`, `faktor`), Projekt-Reiter „Angebote / Rechnungen“ mit Summenvergleich, optionale Kontaktverknüpfung am Lieferanten (Schema 11). Mit Schein-Server auf SQLite getestet, **nicht gegen echtes Lexoffice / nicht auf MariaDB**.
 - **0.1** Grundgerüst: Einrichtungsassistent, Login, Rollen, Lieferanten, Projekte, Bestellungen, Wareneingang mit Teillieferung, Rückstand, CSV.
