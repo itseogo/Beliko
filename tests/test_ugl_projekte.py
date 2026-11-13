@@ -114,4 +114,28 @@ h_bdel = P("/bestellungen/2/loeschen", {}, page="/bestellungen/2")
 assert "gelöscht" in h_bdel
 assert "/bestellungen/2" not in G("/bestellungen")
 
+# Abgerufenen Lieferschein direkt in der Bestellung zuordnen testen
+from pathlib import Path
+from einkauf import config
+from einkauf.models import SupplierFile
+with app.extensions["SessionLocal"]() as s:
+    pfad_rel = "lieferantendateien/test_lief.001"
+    (config.DATA_DIR / "lieferantendateien").mkdir(parents=True, exist_ok=True)
+    (config.DATA_DIR / pfad_rel).write_bytes(raw)
+    sf = SupplierFile(supplier_id=1, name="B0261027.001", pfad=pfad_rel, groesse=len(raw), sha256="abc",
+                      status="neu", belegnr="LS-9988")
+    s.add(sf)
+    s.commit()
+    sf_id = sf.id
+
+h_b1 = G("/bestellungen/1")
+assert "Aus abgerufenen Dateien zuordnen" in h_b1
+assert "Lieferschein auswählen" in h_b1
+assert "LS-9988" in h_b1
+
+# Lieferschein der Bestellung 1 zuordnen & Vorschau aufrufen
+h_prev = P("/bestellungen/1/datei-zuordnen", {"datei_id": str(sf_id)}, page="/bestellungen/1")
+assert "Lieferantendatei prüfen" in h_prev
+assert "LS-9988" in h_prev or "B0261027.001" in h_prev
+
 print("NEUE FUNKTIONEN OK")

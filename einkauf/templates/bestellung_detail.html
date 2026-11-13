@@ -87,14 +87,133 @@
 
 {% if bearbeiten %}
 <details class="zusatz" {{ 'open' if o.status in ('bestellt', 'teilgeliefert') }}>
-  <summary>Lieferantendatei einlesen (UGL)</summary>
-  <p class="meta">Lade eine Datei aus dem Ausgang-Ordner des Lieferanten hoch, zum Beispiel <code>B0261027.001</code>. Du siehst zuerst eine Vorschau und entscheidest dann, was übernommen wird.</p>
-  <form method="post" action="{{ url_for('main.ugl_hochladen', oid=o.id) }}" enctype="multipart/form-data" class="inline">
-    {{ csrf() }}
-    <label class="f"><span>Datei</span><input type="file" name="datei" required></label>
-    <button class="btn">Datei prüfen</button>
-  </form>
+  <summary>Lieferantendatei einlesen / Lieferschein zuordnen (UGL)</summary>
+  <p class="meta">Lieferschein oder Auftragsbestätigung aus den abgerufenen Dateien dieses Lieferanten zuordnen oder eine neue UGL-Datei hochladen. Du siehst zuerst eine Vorschau und entscheidest dann, was übernommen wird.</p>
+
+  {% if abgerufene_dateien %}
+  <div class="panel" style="background:var(--head-bg);border:1px solid var(--line);margin:.5rem 0 1rem;padding:.9rem 1rem;border-radius:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.75rem">
+      <div>
+        <span style="font-weight:700;font-size:1rem;display:flex;align-items:center;gap:.45rem">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          Aus abgerufenen Dateien zuordnen
+        </span>
+        <small class="meta" style="margin:0">Vom FTP-Server abgerufene Lieferscheine/Dateien von {{ o.supplier.name }}.</small>
+      </div>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        {% if ftp_abrufbar %}
+        <form method="post" action="{{ url_for('main.dateien_abrufen') }}" style="margin:0">
+          {{ csrf() }}
+          <input type="hidden" name="lieferant" value="{{ o.supplier_id }}">
+          <input type="hidden" name="weiter" value="{{ url_for('main.bestellung_detail', oid=o.id) }}">
+          <button class="btn sek" style="font-size:.85rem;padding:.35rem .75rem" title="Prüft den FTP-Server sofort auf neue Dateien">FTP jetzt abrufen</button>
+        </form>
+        {% endif %}
+        <button type="button" class="btn" style="background:var(--blue);color:#fff" onclick="document.getElementById('dialog-lieferscheine').showModal()">
+          🔍 Lieferschein auswählen …
+        </button>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('main.bestellung_datei_zuordnen', oid=o.id) }}" style="margin-top:.75rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+      {{ csrf() }}
+      <select id="datei-select" name="datei_id" style="flex:1;min-width:18rem" required>
+        <option value="">– Abgerufenen Lieferschein / Datei auswählen –</option>
+        {% for f in abgerufene_dateien %}
+        <option value="{{ f.id }}">
+          {{ f.name }}{% if f.belegnr %} · Lieferschein {{ f.belegnr }}{% endif %}{% if f.datei_datum %} vom {{ f.datei_datum|datum }}{% endif %}{% if f.positionen %} ({{ f.positionen }} Pos.){% endif %}{% if f.status == 'neu' %} [Neu]{% elif f.status == 'verarbeitet' %} [Verarbeitet]{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+      <button class="btn">Lieferschein zuordnen &amp; prüfen</button>
+    </form>
+  </div>
+  {% elif ftp_abrufbar %}
+  <div class="panel" style="background:var(--head-bg);border:1px dashed var(--line);margin:.5rem 0 1rem;padding:.75rem 1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+    <div>
+      <b>Noch keine abgerufenen Dateien von {{ o.supplier.name }} vorhanden.</b>
+      <div class="meta" style="margin:0">Du kannst den FTP-Server des Lieferanten jetzt abfragen:</div>
+    </div>
+    <form method="post" action="{{ url_for('main.dateien_abrufen') }}" style="margin:0">
+      {{ csrf() }}
+      <input type="hidden" name="lieferant" value="{{ o.supplier_id }}">
+      <input type="hidden" name="weiter" value="{{ url_for('main.bestellung_detail', oid=o.id) }}">
+      <button class="btn sek">Dateien jetzt vom FTP abrufen</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <details style="margin-top:.75rem"><summary style="cursor:pointer;font-weight:600;color:var(--muted)">Oder manuelle UGL-Datei vom Computer hochladen</summary>
+    <form method="post" action="{{ url_for('main.ugl_hochladen', oid=o.id) }}" enctype="multipart/form-data" class="inline" style="margin-top:.5rem">
+      {{ csrf() }}
+      <label class="f"><span>Datei</span><input type="file" name="datei" required></label>
+      <button class="btn">Datei prüfen</button>
+    </form>
+  </details>
 </details>
+
+{% if abgerufene_dateien %}
+<dialog id="dialog-lieferscheine">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+    <h3 style="margin:0">Abgerufenen Lieferschein auswählen</h3>
+    <button type="button" class="link-b" onclick="document.getElementById('dialog-lieferscheine').close()" style="font-size:1.3rem;line-height:1;cursor:pointer">✕</button>
+  </div>
+  <p class="meta" style="margin:-.25rem 0 .75rem">Wähle eine vom Lieferanten {{ o.supplier.name }} abgerufene Datei, um sie mit dieser Bestellung abzugleichen.</p>
+
+  <label class="f" style="margin-bottom:.75rem">
+    <span>Suchen</span>
+    <input type="search" id="lieferschein-suchfeld" placeholder="Nach Dateiname oder Lieferschein-Nr. suchen…" oninput="lieferscheinFiltern(this.value)" autocomplete="off">
+  </label>
+
+  <div class="scroll" style="max-height:22rem;overflow-y:auto;border:1px solid var(--line);border-radius:6px">
+    <table id="lieferschein-tabelle" class="wahl">
+      <thead>
+        <tr>
+          <th>Datei</th>
+          <th>Belegnr.</th>
+          <th>Datum</th>
+          <th>Art</th>
+          <th class="r">Positionen</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in abgerufene_dateien %}
+        <tr class="datei-zeile"
+            data-suchtext="{{ ((f.name or '') ~ ' ' ~ (f.belegnr or '') ~ ' ' ~ (f.belegart or ''))|lower }}"
+            style="cursor:pointer"
+            onclick="document.getElementById('datei-select').value='{{ f.id }}'; document.getElementById('dialog-lieferscheine').close(); document.getElementById('datei-select').form.submit()">
+          <td><b>{{ f.name }}</b></td>
+          <td>{{ f.belegnr or '–' }}</td>
+          <td>{{ f.datei_datum|datum or f.abgerufen_am.strftime('%d.%m.%Y') }}</td>
+          <td>{{ f.belegart or 'UGL' }}</td>
+          <td class="r">{{ f.positionen if f.positionen is not none else '–' }}</td>
+          <td><span class="chip {{ 'bald' if f.status == 'neu' else 'ok' }}">{{ DATEI_STATUS.get(f.status, f.status) }}</span></td>
+          <td class="r">
+            <button type="button" class="btn sek" style="padding:.2rem .6rem;font-size:.85rem">Zuordnen</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div style="display:flex;justify-content:flex-end;margin-top:1rem">
+    <button type="button" class="btn sek" onclick="document.getElementById('dialog-lieferscheine').close()">Schließen</button>
+  </div>
+</dialog>
+
+<script>
+function lieferscheinFiltern(q) {
+  q = (q || '').toLowerCase().trim();
+  const rows = document.querySelectorAll('#lieferschein-tabelle tbody tr');
+  rows.forEach(r => {
+    const text = r.getAttribute('data-suchtext') || '';
+    r.style.display = (!q || text.includes(q)) ? '' : 'none';
+  });
+}
+</script>
+{% endif %}
 {% endif %}
 
 {% if o.deliveries %}

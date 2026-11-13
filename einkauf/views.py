@@ -58,6 +58,7 @@ BELEG_STATUS = {
 }
 MONATE = ["", "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August",
           "September", "Oktober", "November", "Dezember"]
+DATEI_STATUS = {"neu": "Neu", "verarbeitet": "Verarbeitet", "ignoriert": "Ignoriert", "fehler": "Nicht lesbar"}
 
 
 @main.app_context_processor
@@ -805,8 +806,41 @@ def bestellung_detail(oid):
     o = _bestellung(oid)
     von = request.args.get("von", type=int)
     von_projekt = g.db.get(Project, von) if von else None
+
+    # Abgerufene Lieferantendateien dieses Lieferanten laden
+    abgerufene_dateien = (g.db.query(SupplierFile)
+                          .filter(SupplierFile.supplier_id == o.supplier_id)
+                          .filter(or_(SupplierFile.bestell_id.is_(None), SupplierFile.bestell_id == o.id))
+                          .filter(SupplierFile.status.in_(("neu", "verarbeitet", "ignoriert")))
+                          .order_by(SupplierFile.status == "neu", SupplierFile.abgerufen_am.desc(), SupplierFile.id.desc())
+                          .all())
+    abgerufene_dateien.sort(key=lambda f: (f.status != "neu", -(f.datei_datum.toordinal() if f.datei_datum else 0)))
+    ftp_abrufbar = bool(o.supplier and o.supplier.active and not lieferantendateien.pruefen(o.supplier))
+
     return render_template("bestellung_detail.html", o=o, projekte=aktive_projekte(), von_projekt=von_projekt,
-                           offene=[i for i in o.items if not i.storniert and i.rest > 0])
+                           offene=[i for i in o.items if not i.storniert and i.rest > 0],
+                           abgerufene_dateien=abgerufene_dateien,
+                           ftp_abrufbar=ftp_abrufbar,
+                           DATEI_STATUS=DATEI_STATUS)
+
+
+@main.route("/bestellungen/<int:oid>/datei-zuordnen", methods=["POST"])
+@edit_required
+def bestellung_datei_zuordnen(oid):
+    o = _bestellung(oid)
+    fid = request.form.get("datei_id", type=int)
+    if not fid:
+        flash("Bitte einen abgerufenen Lieferschein auswählen.", "fehler")
+        return redirect(url_for("main.bestellung_detail", oid=oid))
+    f = g.db.get(SupplierFile, fid) or abort(404)
+    if f.supplier_id != o.supplier_id:
+        flash("Die Datei gehört zu einem anderen Lieferanten als diese Bestellung.", "fehler")
+        return redirect(url_for("main.bestellung_detail", oid=oid))
+    try:
+        return _ugl_vorschau(o, lieferantendateien.inhalt(f), f.name, datei_id=f.id)
+    except (ugl.UglFehler, lieferantendateien.AbrufFehler, OSError) as e:
+        flash(f"Die Datei kann nicht gelesen werden: {e}", "fehler")
+        return redirect(url_for("main.bestellung_detail", oid=oid))
 
 
 def status_pruefen(oid):
@@ -2317,6 +2351,9 @@ def dateien_abrufen():
         gemeldet += 1
     if not gemeldet and not sid:
         flash("Kein Lieferant hat einen Abruf eingerichtet (Einstellungen → Lieferanten → UGL-Schnittstelle).", "warn")
+    weiter = request.form.get("weiter")
+    if weiter:
+        return redirect(weiter)
     return redirect(url_for("main.dateien"))
 
 
