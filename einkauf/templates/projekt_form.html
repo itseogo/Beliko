@@ -67,8 +67,20 @@
   {{ field('Budget-Faktor (bei Modus × Faktor)', 'budget_faktor', (p.budget_faktor or 1)|qty, mode='decimal', hint='z. B. 1,00 oder 0,85 oder 1,15 (Warensumme aus verknüpften Angeboten × Faktor).') }}
   </div>
   {{ area('Notiz', 'notiz', p.notiz) }}
-  <div class="actions"><button class="btn">Speichern</button><a class="btn sek" href="{{ url_for('main.projekte') if neu else url_for('main.projekte', p=p.id, status='alle') }}">Abbrechen</a></div>
+  <div class="actions">
+    <button class="btn">Speichern</button>
+    <a class="btn sek" href="{{ url_for('main.projekte') if neu else url_for('main.projekte', p=p.id, status='alle') }}">Abbrechen</a>
+    {% if not neu and g.user.role != 'leser' %}
+    <button type="submit" form="form-loeschen" class="btn gefahr" style="margin-left:auto" onclick="return confirm('Möchtest du das Projekt „{{ p.nummer }} · {{ p.name }}“ wirklich löschen?')">Projekt löschen</button>
+    {% endif %}
+  </div>
 </form>
+
+{% if not neu and g.user.role != 'leser' %}
+<form id="form-loeschen" method="post" action="{{ url_for('main.projekt_loeschen', pid=p.id) }}" style="display:none">
+  {{ csrf() }}
+</form>
+{% endif %}
 
 {% if angebote %}
 <dialog id="dialog-angebote">

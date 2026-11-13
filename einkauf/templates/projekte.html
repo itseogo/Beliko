@@ -16,7 +16,7 @@
 <div class="liste-oben scroll">
 {% if projekte %}
 <table class="wahl">
-<thead><tr><th>Nr.</th><th>Name</th><th>Kunde</th><th>Status</th><th class="r">Offen</th><th class="r">Bestellt</th><th class="r">Materialbudget</th></tr></thead>
+<thead><tr><th>Nr.</th><th>Name</th><th>Kunde</th><th>Status</th><th class="r">Offen</th><th class="r">Bestellt</th><th class="r">Materialbudget</th><th></th></tr></thead>
 <tbody>
 {% for q in projekte %}{% set s = summen(q) %}
 <tr class="{{ 'sel' if p and p.id == q.id }}" onclick="location.href='{{ url_for('main.projekte', p=q.id, tab=tab, status=status, q=suche or None) }}#unten'">
@@ -25,6 +25,14 @@
   <td>{{ q.kunde or '' }}</td><td>{{ STATUS[q.status] }}</td>
   <td class="r">{{ s.offen }}</td><td class="r">{{ s.bestellt|money }}</td>
   <td class="r">{% if s.budget is not none %}{{ s.budget|money }}{% if s.prozent is not none %} <span class="chip {{ 'ueberfaellig' if s.prozent > 100 else ('bald' if s.prozent >= 80 else 'ok') }}">{{ s.prozent }} %</span>{% endif %}{% else %}–{% endif %}</td>
+  <td class="r" onclick="event.stopPropagation()">
+    {% if g.user.role != 'leser' %}
+    <form method="post" action="{{ url_for('main.projekt_loeschen', pid=q.id) }}" onsubmit="event.stopPropagation(); return confirm('Möchtest du das Projekt „{{ q.nummer }} · {{ q.name }}“ wirklich löschen?')" style="display:inline;margin:0">
+      {{ csrf() }}
+      <button class="link-b" style="padding:.2rem .4rem;font-size:.82rem" title="Projekt löschen">Löschen</button>
+    </form>
+    {% endif %}
+  </td>
 </tr>
 {% endfor %}
 </tbody></table>
@@ -36,7 +44,15 @@
 {% set s = summen(p) %}
 <div class="kopf"><div><h2 class="p-titel">{{ p.nummer }} · {{ p.name }}</h2>
   <p class="meta">{% if p.contact_id %}<a href="{{ url_for('main.kontakt_detail', cid=p.contact_id) }}">{{ p.kunde }}</a>{% else %}{{ p.kunde or 'Kein Kunde angegeben' }}{% endif %} · {{ STATUS[p.status] }}</p></div>
-  {% if g.user.role != 'leser' %}<a class="btn sek" href="{{ url_for('main.projekt_bearbeiten', pid=p.id) }}">Bearbeiten</a>{% endif %}</div>
+  {% if g.user.role != 'leser' %}
+  <div style="display:flex;gap:.5rem;align-items:center">
+    <a class="btn sek" href="{{ url_for('main.projekt_bearbeiten', pid=p.id) }}">Bearbeiten</a>
+    <form method="post" action="{{ url_for('main.projekt_loeschen', pid=p.id) }}" onsubmit="return confirm('Möchtest du das Projekt „{{ p.nummer }} · {{ p.name }}“ wirklich löschen?')" style="margin:0">
+      {{ csrf() }}
+      <button class="btn gefahr">Projekt löschen</button>
+    </form>
+  </div>
+  {% endif %}</div>
 <div class="tabs">
   {% for k, t in [('bestellungen', 'Bestellungen'), ('material', 'Material'), ('lexoffice', 'Angebote / Rechnungen'), ('uebersicht', 'Übersicht')] %}
   <a class="{{ 'on' if tab == k }}" href="{{ url_for('main.projekte', p=p.id, tab=k, status=status, q=suche or None) }}#unten">{{ t }}{% if k == 'lexoffice' and p.lex_documents %} ({{ p.lex_documents|length }}){% endif %}</a>{% endfor %}

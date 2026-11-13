@@ -90,4 +90,17 @@ tk = re.search(r'name="token" value="([0-9a-f]{32})"', h).group(1)
 h = c.post("/bestellungen/2/ugl/uebernehmen", data={"_csrf": tok(c.get("/bestellungen/2").get_data(as_text=True)), "token": tk, "aktion": "ab", "vermerken": "1", "pos": ["1"]}, follow_redirects=True).get_data(as_text=True)
 assert "Bestätigung vermerkt" in h and "Vom Lieferanten bestätigt (27.10.2026)" in h and "nicht enthalten" in h and "AB 4755816401" in h
 assert "Teillieferung" not in c.get("/bestellungen/2").get_data(as_text=True).split("Bisherige")[0].split("statusleiste")[1][:300]
+
+# Projekt löschen testen
+h_proj = G("/projekte?p=2")
+assert "Projekt löschen" in h_proj
+assert "Löschen" in h_proj
+h_bearb = G("/projekte/2/bearbeiten")
+assert "Projekt löschen" in h_bearb
+
+# Projekt 2 löschen (hat Positionen von vorhin)
+h_del = P("/projekte/2/loeschen", {}, page="/projekte?p=2")
+assert "Aumann Schaltschrank gelöscht" in h_del
+assert "Aumann Schaltschrank" not in G("/projekte")
+
 print("NEUE FUNKTIONEN OK")

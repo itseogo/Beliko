@@ -645,6 +645,30 @@ def projekt_beleg_zuordnen(pid):
     return redirect(url_for("main.projekte", p=p.id, tab="lexoffice", status="alle"))
 
 
+@main.route("/projekte/<int:pid>/loeschen", methods=["POST"])
+@edit_required
+def projekt_loeschen(pid):
+    p = g.db.get(Project, pid) or abort(404)
+    ok, lock = sperre.holen(g.db, "projekt", pid, g.user)
+    if not ok:
+        flash(sperre.meldung("projekt", lock), "fehler")
+        return redirect(url_for("main.projekte", p=pid, status="alle"))
+
+    nr, name = p.nummer, p.name
+    # Zugeordnete Bestellpositionen und Lexoffice-Belege freigeben
+    for item in p.items:
+        item.project_id = None
+    for doc in p.lex_documents:
+        doc.project_id = None
+
+    sperre.freigeben(g.db, "projekt", pid, g.user)
+    g.db.delete(p)
+    protokoll("geloescht", "projekt", pid, f"{nr} · {name}")
+    g.db.commit()
+    flash(f"Projekt {nr} · {name} gelöscht.", "ok")
+    return redirect(url_for("main.projekte"))
+
+
 # ------------------------------------------------------------- Bestellungen
 @main.route("/bestellungen")
 @login_required
