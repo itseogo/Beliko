@@ -25,7 +25,7 @@ r = c.get("/"); assert r.status_code == 302 and "/setup" in r.headers["Location"
 r = post("/setup/", DB)
 assert "Schritt 2 von 2" in r.get_data(as_text=True), r.get_data(as_text=True)[:500]
 r = post("/setup/admin", {"username": "chris", "password": "kurz", "password2": "kurz"})
-assert "mindestens 8" in r.get_data(as_text=True)
+assert "mindestens 6" in r.get_data(as_text=True)
 r = post("/setup/admin", {"username": "chris", "firma": "Elektro Test", "password": "geheim1234", "password2": "geheim1234"})
 assert "Einrichtung abgeschlossen" in r.get_data(as_text=True)
 # nach Einrichtung: Setup gesperrt

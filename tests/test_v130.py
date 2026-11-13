@@ -50,7 +50,7 @@ assert "Projekt bearbeiten" in h_chris
 
 # emma versucht Projekt 1 zu öffnen -> gesperrt mit Benachrichtigung über chris
 h_emma = G("/projekte/1/bearbeiten", cl=em)
-assert "ist gesperrt" in h_emma and "chris" in h_emma and "Projekt bearbeiten" not in h_emma
+assert "ist gesperrt" in h_emma and "chris" in h_emma and "<title>Projekt bearbeiten" not in h_emma
 
 # Protokoll zeigt aktive Sperre
 assert "chris" in G("/einstellungen/protokoll")

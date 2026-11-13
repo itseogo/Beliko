@@ -6,7 +6,7 @@
   {{ csrf() }}
   {% if neu %}{{ field('Benutzername', 'username', u.username, required=True, autofocus=True) }}{% endif %}
   {{ auswahl('Rolle', 'role', rollen.items()|list, u.role) }}
-  {{ field('Passwort' if neu else 'Neues Passwort (leer lassen = unverändert)', 'password', '', type='password', required=neu, hint='Mindestens 8 Zeichen') }}
+  {{ field('Passwort' if neu else 'Neues Passwort (leer lassen = unverändert)', 'password', '', type='password', required=neu, hint='Mindestens 6 Zeichen') }}
   {% if not neu %}<label class="check"><input type="checkbox" name="active" value="1" {{ 'checked' if u.active }}> Benutzer ist aktiv</label>{% endif %}
   <p class="meta">Admin darf alles. Einkäufer erfasst Bestellungen, Projekte und Wareneingänge. „Nur lesen“ sieht alles, ändert nichts.</p>
   <div class="actions"><button class="btn">Speichern</button><a class="btn sek" href="{{ url_for('main.benutzer') }}">Abbrechen</a></div>

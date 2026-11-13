@@ -6,7 +6,7 @@
   {% if fehler %}<div class="flash fehler">{{ fehler }}</div>{% endif %}
   {{ csrf() }}
   {{ field('Aktuelles Passwort', 'alt', '', type='password', required=True) }}
-  {{ field('Neues Passwort', 'neu', '', type='password', required=True, hint='Mindestens 8 Zeichen') }}
+  {{ field('Neues Passwort', 'neu', '', type='password', required=True, hint='Mindestens 6 Zeichen') }}
   {{ field('Neues Passwort wiederholen', 'neu2', '', type='password', required=True) }}
   <button class="btn">Passwort ändern</button>
 </form>

@@ -247,8 +247,8 @@ def admin_step():
         pw, pw2 = request.form.get("password", ""), request.form.get("password2", "")
         if not name:
             fehler = "Bitte einen Benutzernamen angeben."
-        elif len(pw) < 8:
-            fehler = "Das Passwort braucht mindestens 8 Zeichen."
+        elif len(pw) < 6:
+            fehler = "Das Passwort braucht mindestens 6 Zeichen."
         elif pw != pw2:
             fehler = "Die beiden Passwörter stimmen nicht überein."
         else:
@@ -316,8 +316,8 @@ def konto():
         alt, neu, neu2 = request.form.get("alt", ""), request.form.get("neu", ""), request.form.get("neu2", "")
         if not check_password_hash(g.user.password_hash, alt):
             fehler = "Das aktuelle Passwort stimmt nicht."
-        elif len(neu) < 8:
-            fehler = "Das neue Passwort braucht mindestens 8 Zeichen."
+        elif len(neu) < 6:
+            fehler = "Das neue Passwort braucht mindestens 6 Zeichen."
         elif neu != neu2:
             fehler = "Die neuen Passwörter stimmen nicht überein."
         else:
@@ -1153,8 +1153,8 @@ def benutzer_neu():
             fehler = "Bitte einen Benutzernamen angeben."
         elif g.db.query(User).filter(func.lower(User.username) == name.lower()).first():
             fehler = "Diesen Benutzernamen gibt es schon."
-        elif len(pw) < 8:
-            fehler = "Das Passwort braucht mindestens 8 Zeichen."
+        elif len(pw) < 6:
+            fehler = "Das Passwort braucht mindestens 6 Zeichen."
         else:
             u.password_hash = generate_password_hash(pw)
             g.db.add(u)
@@ -1177,8 +1177,8 @@ def benutzer_bearbeiten(uid):
             fehler = "Der letzte aktive Admin kann nicht herabgestuft oder deaktiviert werden."
         elif u.id == g.user.id and not aktiv:
             fehler = "Du kannst dich nicht selbst deaktivieren."
-        elif pw and len(pw) < 8:
-            fehler = "Das neue Passwort braucht mindestens 8 Zeichen."
+        elif pw and len(pw) < 6:
+            fehler = "Das neue Passwort braucht mindestens 6 Zeichen."
         else:
             u.role, u.active = rolle, aktiv
             if pw:

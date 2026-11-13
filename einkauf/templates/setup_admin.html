@@ -7,7 +7,7 @@
   {{ csrf() }}
   {{ field('Firmenname (erscheint oben links)', 'firma', firma) }}
   {{ field('Benutzername', 'username', name, required=True) }}
-  {{ field('Passwort', 'password', '', type='password', required=True, hint='Mindestens 8 Zeichen') }}
+  {{ field('Passwort', 'password', '', type='password', required=True, hint='Mindestens 6 Zeichen') }}
   {{ field('Passwort wiederholen', 'password2', '', type='password', required=True) }}
   <button class="btn">Einrichtung abschließen</button>
 </form>
