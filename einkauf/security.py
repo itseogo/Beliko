@@ -30,7 +30,7 @@ def csrf_token():
 
 def check_csrf():
     if request.method == "POST":
-        sent = request.form.get("_csrf", "")
+        sent = request.form.get("_csrf", "") or request.headers.get("X-CSRFToken", "") or request.args.get("_csrf", "")
         if not sent or not secrets.compare_digest(sent, session.get("_csrf", "")):
             abort(400, "Ungültiges Formular. Seite neu laden und erneut versuchen.")
 

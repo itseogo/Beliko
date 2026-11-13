@@ -57,6 +57,6 @@
   </div>
   <label class="check"><input type="checkbox" name="steuerfrei" value="1" {{ 'checked' if c.steuerfrei }}> Steuerfreie Rechnungen erlaubt</label>
   {{ area('Notiz', 'notiz', c.notiz) }}
-  <div class="actions"><button class="btn">Speichern</button><a class="btn sek" href="{{ url_for('main.kontakte') if neu else url_for('main.kontakt_detail', cid=c.id) }}">Abbrechen</a></div>
+  <div class="actions"><button class="btn">Speichern</button><a class="btn sek" href="{{ url_for('main.sperre_verlassen', obj_typ='kontakt', obj_id=c.id, weiter=url_for('main.kontakt_detail', cid=c.id)) if not neu else url_for('main.kontakte') }}">Abbrechen</a></div>
 </form>
 {% endblock %}

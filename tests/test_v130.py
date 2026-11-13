@@ -70,9 +70,41 @@ with db() as s:
     assert s.query(AuditLog).filter(AuditLog.obj_typ == "projekt", AuditLog.aktion == "geaendert").count() >= 1
 
 # Jetzt kann emma öffnen; wenn emma sich abmeldet, wird ihre Sperre entfernt
-assert "Projekt bearbeiten" in G("/projekte/1/bearbeiten", cl=em)
+h_em = G("/projekte/1/bearbeiten", cl=em)
+assert "Projekt bearbeiten" in h_em
+assert "releaseLock" in h_em
+assert "sperre/verlassen" in h_em
 with db() as s:
     assert s.query(EditLock).count() == 1
+
+# Abbrechen / Verlassen per GET (Klick auf Abbrechen-Button)
+r_leave = em.get("/sperre/verlassen/projekt/1?weiter=/projekte", follow_redirects=True)
+assert r_leave.status_code == 200
+with db() as s:
+    assert s.query(EditLock).count() == 0
+
+# Öffnen und per Beacon / Pagehide POST freigeben
+G("/projekte/1/bearbeiten", cl=em)
+with db() as s:
+    assert s.query(EditLock).count() == 1
+r_beacon = em.post("/sperre/verlassen/projekt/1", data={"_csrf": tok(G("/projekte", cl=em)), "beacon": "1"})
+assert r_beacon.status_code == 200 and r_beacon.json.get("ok") is True
+with db() as s:
+    assert s.query(EditLock).count() == 0
+
+# Heartbeat Ping testen
+G("/projekte/1/bearbeiten", cl=em)
+r_ping = em.post("/sperre/ping/projekt/1", data={"_csrf": tok(G("/projekte", cl=em))})
+assert r_ping.status_code == 200 and r_ping.json.get("ok") is True
+
+# Admin kann alle Sperren auf einmal aufheben
+h_prot = G("/einstellungen/protokoll")
+assert "Alle Sperren aufheben" in h_prot
+h_all = P("/sperre/alle-aufheben", {}, page="/einstellungen/protokoll")
+assert "aufgehoben" in h_all
+with db() as s:
+    assert s.query(EditLock).count() == 0
+
 P("/logout", {}, page="/projekte", cl=em)
 with db() as s:
     assert s.query(EditLock).count() == 0

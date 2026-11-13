@@ -69,7 +69,7 @@
   {{ area('Notiz', 'notiz', p.notiz) }}
   <div class="actions">
     <button class="btn">Speichern</button>
-    <a class="btn sek" href="{{ url_for('main.projekte') if neu else url_for('main.projekte', p=p.id, status='alle') }}">Abbrechen</a>
+    <a class="btn sek" href="{{ url_for('main.projekte') if neu else url_for('main.sperre_verlassen', obj_typ='projekt', obj_id=p.id, weiter=url_for('main.projekte', p=p.id, status='alle')) }}">Abbrechen</a>
     {% if not neu and g.user.role != 'leser' %}
     <button type="submit" form="form-loeschen" class="btn gefahr" style="margin-left:auto" onclick="return confirm('Möchtest du das Projekt „{{ p.nummer }} · {{ p.name }}“ wirklich löschen?')">Projekt löschen</button>
     {% endif %}

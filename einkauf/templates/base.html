@@ -111,5 +111,47 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && m.open) { m.open = false; m.querySelector('summary').focus(); } });
 })();
 </script>
+{% if g.aktive_sperre %}
+<script>
+(function () {
+  var typ = {{ g.aktive_sperre[0]|tojson }};
+  var id = {{ g.aktive_sperre[1]|tojson }};
+  var csrf = {{ csrf_token()|tojson }};
+  var baseUnlock = {{ url_for('main.sperre_verlassen', obj_typ='__TYP__', obj_id=0)|tojson }};
+  var basePing = {{ url_for('main.sperre_ping', obj_typ='__TYP__', obj_id=0)|tojson }};
+  var unlockUrl = baseUnlock.replace('__TYP__', typ).replace('/0', '/' + id) + '?_csrf=' + encodeURIComponent(csrf);
+  var pingUrl = basePing.replace('__TYP__', typ).replace('/0', '/' + id);
+  var formSubmitting = false;
+
+  document.querySelectorAll('form').forEach(function (f) {
+    f.addEventListener('submit', function () { formSubmitting = true; });
+  });
+
+  function releaseLock() {
+    if (formSubmitting) return;
+    var data = new FormData();
+    data.append('_csrf', csrf);
+    data.append('beacon', '1');
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(unlockUrl, data);
+    } else {
+      fetch(unlockUrl, { method: 'POST', body: data, keepalive: true }).catch(function () {});
+    }
+  }
+
+  window.addEventListener('pagehide', releaseLock);
+  window.addEventListener('beforeunload', releaseLock);
+
+  // Heartbeat alle 45s: verlängert die Bearbeitungssperre, solange die Seite geöffnet ist
+  setInterval(function () {
+    if (!document.hidden && !formSubmitting) {
+      var data = new FormData();
+      data.append('_csrf', csrf);
+      fetch(pingUrl, { method: 'POST', body: data }).catch(function () {});
+    }
+  }, 45000);
+})();
+</script>
+{% endif %}
 </body>
 </html>

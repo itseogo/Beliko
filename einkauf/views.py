@@ -7,7 +7,7 @@ import time
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
-from flask import (Blueprint, Response, abort, current_app, flash, g, redirect,
+from flask import (Blueprint, Response, abort, current_app, flash, g, jsonify, redirect,
                    render_template, request, session, url_for)
 from sqlalchemy import extract, func, or_
 from sqlalchemy.orm import joinedload, selectinload
@@ -593,6 +593,7 @@ def projekt_bearbeiten(pid):
         flash(sperre.meldung("projekt", lock), "fehler")
         return redirect(url_for("main.projekte", p=p.id, status="alle"))
     g.db.commit()
+    g.aktive_sperre = ("projekt", pid)
     fehler = None
     angebote = (g.db.query(LexDocument).options(joinedload(LexDocument.project))
                 .filter(LexDocument.typ == "angebot", LexDocument.archiviert.is_(False))
@@ -1116,6 +1117,7 @@ def lieferant_bearbeiten(sid):
         flash(sperre.meldung("lieferant", lock), "fehler")
         return redirect(url_for("main.lieferanten"))
     g.db.commit()
+    g.aktive_sperre = ("lieferant", sid)
     fehler = None
     if request.method == "POST":
         form_ver = request.form.get("version", type=int)
@@ -1449,6 +1451,7 @@ def kontakt_bearbeiten(cid):
         flash(sperre.meldung("kontakt", lock), "fehler")
         return redirect(url_for("main.kontakt_detail", cid=c.id))
     g.db.commit()
+    g.aktive_sperre = ("kontakt", cid)
     fehler = None
     if request.method == "POST":
         form_ver = request.form.get("version", type=int)
@@ -2017,6 +2020,7 @@ def lex_beleg_detail(did):
             gesperrt_von = lock
         else:
             g.db.commit()
+            g.aktive_sperre = ("lex_beleg", did)
     if request.method == "POST":
         if g.user.role == "leser":
             abort(403)
@@ -2071,7 +2075,39 @@ def sperre_freigeben(obj_typ, obj_id):
     protokoll("entsperrt", obj_typ, obj_id, details="Bearbeitungssperre durch Admin aufgehoben")
     g.db.commit()
     flash("Bearbeitungssperre aufgehoben.", "ok")
+    return redirect(request.referrer or url_for("main.einstellungen_protokoll"))
+
+
+@main.route("/sperre/alle-aufheben", methods=["POST"])
+@admin_required
+def sperren_alle_freigeben():
+    anzahl = sperre.alle_freigeben(g.db)
+    protokoll("entsperrt", "sperren", None, details=f"Alle {anzahl} Bearbeitungssperren durch Admin aufgehoben")
+    g.db.commit()
+    flash(f"Alle {anzahl} Bearbeitungssperren wurden aufgehoben.", "ok")
+    return redirect(request.referrer or url_for("main.einstellungen_protokoll"))
+
+
+@main.route("/sperre/verlassen/<obj_typ>/<int:obj_id>", methods=["GET", "POST"])
+@login_required
+def sperre_verlassen(obj_typ, obj_id):
+    force = (g.user.role == "admin")
+    sperre.freigeben(g.db, obj_typ, obj_id, user=g.user, force=force)
+    g.db.commit()
+    if request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.form.get("beacon") == "1" or request.args.get("beacon") == "1":
+        return jsonify({"ok": True})
+    weiter = request.form.get("weiter") or request.args.get("weiter")
+    if weiter:
+        return redirect(weiter)
     return redirect(request.referrer or url_for("main.dashboard"))
+
+
+@main.route("/sperre/ping/<obj_typ>/<int:obj_id>", methods=["POST"])
+@login_required
+def sperre_ping(obj_typ, obj_id):
+    ok = sperre.verlaengern(g.db, obj_typ, obj_id, g.user)
+    g.db.commit()
+    return jsonify({"ok": ok})
 
 
 @main.route("/artikel")

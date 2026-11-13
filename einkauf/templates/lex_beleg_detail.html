@@ -10,8 +10,8 @@
     </p>
   </div>
   <div class="actions">
-    {% if von %}<a class="btn sek" href="{{ url_for('main.projekte', p=von, tab='lexoffice', status='alle') }}">Zurück zum Projekt</a>{% endif %}
-    <a class="btn sek" href="{{ url_for('main.lex_belege') }}">Alle Belege</a>
+    {% if von %}<a class="btn sek" href="{{ url_for('main.sperre_verlassen', obj_typ='lex_beleg', obj_id=doc.id, weiter=url_for('main.projekte', p=von, tab='lexoffice', status='alle')) }}">Zurück zum Projekt</a>{% endif %}
+    <a class="btn sek" href="{{ url_for('main.sperre_verlassen', obj_typ='lex_beleg', obj_id=doc.id, weiter=url_for('main.lex_belege')) }}">Alle Belege</a>
   </div>
 </div>
 

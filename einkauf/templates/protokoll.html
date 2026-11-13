@@ -3,7 +3,17 @@
 <div class="kopf"><h1>Protokoll &amp; Bearbeitungssperren</h1></div>
 
 <div class="panel">
-  <h3>Aktive Bearbeitungssperren ({{ sperren|length }})</h3>
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.75rem;margin-bottom:.5rem">
+    <h3 style="margin:0">Aktive Bearbeitungssperren ({{ sperren|length }})</h3>
+    {% if sperren and g.user.role == 'admin' %}
+    <form method="post" action="{{ url_for('main.sperren_alle_freigeben') }}" style="margin:0">
+      {{ csrf() }}
+      <button class="btn gefahr" style="font-size:.85rem;padding:.35rem .75rem" onclick="return confirm('Möchtest du wirklich ALLE {{ sperren|length }} aktiven Bearbeitungssperren sofort aufheben?')">
+        Alle Sperren aufheben
+      </button>
+    </form>
+    {% endif %}
+  </div>
   {% if sperren %}
   <div class="scroll"><table>
     <thead><tr><th>Bereich</th><th>ID</th><th>Benutzer</th><th>Seit</th><th>Gültig bis</th><th></th></tr></thead>

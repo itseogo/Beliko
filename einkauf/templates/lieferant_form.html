@@ -60,7 +60,7 @@
       <small>Prüfe bei der ersten Übernahme in der Vorschau, ob die Einzelpreise stimmen, und stelle das hier ggf. um.</small></label>
   </div>
   <label class="check"><input type="checkbox" name="active" value="1" {{ 'checked' if s.active }}> Lieferant ist aktiv (erscheint bei neuen Bestellungen)</label>
-  <div class="actions"><button class="btn">Speichern</button><a class="btn sek" href="{{ url_for('main.lieferanten') }}">Abbrechen</a></div>
+  <div class="actions"><button class="btn">Speichern</button><a class="btn sek" href="{{ url_for('main.sperre_verlassen', obj_typ='lieferant', obj_id=s.id, weiter=url_for('main.lieferanten')) if not neu else url_for('main.lieferanten') }}">Abbrechen</a></div>
 </form>
 {% if not neu and s.ugl_verfahren in ('ftp', 'ftps', 'datei') %}
 <div class="panel">

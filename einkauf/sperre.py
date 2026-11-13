@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 from .models import EditLock
 
-SPERR_MINUTEN = 15
+SPERR_MINUTEN = 3
 
 TYPEN_NAMEN = {
     "projekt": "Das Projekt",
@@ -17,6 +17,26 @@ TYPEN_NAMEN = {
     "lieferant": "Der Lieferant",
     "lex_beleg": "Der Lexoffice-Beleg",
 }
+
+
+def alle_freigeben(session):
+    """Gibt alle aktiven Bearbeitungssperren frei."""
+    return session.query(EditLock).delete()
+
+
+def verlaengern(session, obj_typ, obj_id, user, minuten=SPERR_MINUTEN):
+    """Verlängert die Sperre für den aktuellen Benutzer (Heartbeat)."""
+    bereinigen(session)
+    jetzt = datetime.now()
+    ablauf = jetzt + timedelta(minutes=minuten)
+    lock = session.query(EditLock).filter(
+        EditLock.obj_typ == obj_typ, EditLock.obj_id == obj_id, EditLock.user_id == user.id
+    ).first()
+    if lock:
+        lock.ablauf = ablauf
+        session.flush()
+        return True
+    return False
 
 
 def bereinigen(session):
