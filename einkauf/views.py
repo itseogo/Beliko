@@ -791,7 +791,7 @@ def bestellung_neu():
 def _bestellung(oid):
     o = (g.db.query(Order).options(
         joinedload(Order.supplier),
-        selectinload(Order.items).selectinload(OrderItem.delivery_items),
+        selectinload(Order.items).selectinload(OrderItem.delivery_items).joinedload(DeliveryItem.delivery),
         selectinload(Order.items).joinedload(OrderItem.project),
         selectinload(Order.deliveries).selectinload(Delivery.items).joinedload(DeliveryItem.item),
     ).populate_existing().filter(Order.id == oid).first())

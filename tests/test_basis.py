@@ -67,7 +67,11 @@ assert "Kältemittelleitung" in get("/bestellungen?status=teilgeliefert&jahr=202
 assert "Keine Bestellungen" in get("/bestellungen?status=teilgeliefert&jahr=2025").get_data(as_text=True)
 h = get("/rueckstand").get_data(as_text=True)
 assert "2 Positionen im Rückstand" in h
-assert "Teilgeliefert" in get("/bestellungen/1").get_data(as_text=True)
+h1 = get("/bestellungen/1").get_data(as_text=True)
+assert "Teilgeliefert" in h1
+assert "Lieferschein &amp; Lieferdatum" in h1 or "Lieferschein" in h1
+assert "LS-1" in h1
+assert "25.10.2026" in h1
 
 # 6 CSV
 r = c.get("/rueckstand?csv=1"); assert r.status_code == 200 and "Kältemittelleitung" in r.get_data(as_text=True)

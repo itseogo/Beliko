@@ -32,13 +32,27 @@
 <h2 id="positionen">Positionen</h2>
 {% if o.items %}
 <div class="scroll"><table>
-<thead><tr><th>Artikel</th><th>Projekt</th><th class="r">Bestellt</th><th class="r">Geliefert</th><th class="r">Rest</th><th>Status</th><th>Voraussichtlich</th><th class="r">Preis</th>{% if bearbeiten %}<th></th>{% endif %}</tr></thead>
+<thead><tr><th>Artikel</th><th>Projekt</th><th class="r">Bestellt</th><th class="r">Geliefert</th><th class="r">Rest</th><th>Status</th><th>Lieferschein &amp; Lieferdatum</th><th>Voraussichtlich</th><th class="r">Preis</th>{% if bearbeiten %}<th></th>{% endif %}</tr></thead>
 <tbody>{% for i in o.items %}
 <tr class="{{ i.faellig }} {{ 'storno' if i.storniert }}">
   <td>{{ i.bezeichnung }}{% if i.artikelnr %}<small class="sub">{{ i.artikelnr }}</small>{% endif %}{% if i.kommission %}<small class="sub">Kommission: {{ i.kommission }}</small>{% endif %}{% if i.hinweis %}<small class="sub hinweis">{{ i.hinweis }}</small>{% endif %}</td>
   <td>{{ i.project.nummer if i.project else '–' }}</td>
   <td class="r">{{ i.menge|qty }} {{ i.einheit or '' }}</td><td class="r">{{ i.geliefert|qty }}</td><td class="r">{{ i.rest|qty if not i.storniert else '' }}</td>
-  <td>{{ i.status }}</td><td>{{ i.erw_lieferdatum|datum }}</td>
+  <td>{{ i.status }}</td>
+  <td>
+    {% if i.delivery_items %}
+      {% for di in i.delivery_items %}
+        <div{% if not loop.first %} style="margin-top:.35rem;padding-top:.25rem;border-top:1px dashed var(--line)"{% endif %}>
+          {% if di.delivery.lieferschein_nr %}<span>{{ di.delivery.lieferschein_nr }}</span>{% else %}<span class="meta">ohne Nr.</span>{% endif %}
+          {% if di.delivery.datum %}<small class="sub">{{ di.delivery.datum|datum }}</small>{% endif %}
+          {% if i.delivery_items|length > 1 %}<small class="meta">({{ di.menge|qty }} {{ i.einheit or '' }})</small>{% endif %}
+        </div>
+      {% endfor %}
+    {% else %}
+      <span class="meta">–</span>
+    {% endif %}
+  </td>
+  <td>{{ i.erw_lieferdatum|datum }}</td>
   <td class="r">{{ i.preis|preis if i.preis is not none else '–' }}</td>
   {% if bearbeiten %}<td><a href="{{ url_for('main.position_bearbeiten', iid=i.id) }}">Bearbeiten</a></td>{% endif %}
 </tr>{% endfor %}</tbody></table></div>
