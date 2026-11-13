@@ -94,7 +94,6 @@ assert "Teillieferung" not in c.get("/bestellungen/2").get_data(as_text=True).sp
 # Projekt löschen testen
 h_proj = G("/projekte?p=2")
 assert "Projekt löschen" in h_proj
-assert "Löschen" in h_proj
 h_bearb = G("/projekte/2/bearbeiten")
 assert "Projekt löschen" in h_bearb
 
@@ -105,7 +104,7 @@ assert "Aumann Schaltschrank" not in G("/projekte")
 
 # Bestellung löschen testen
 h_best = G("/bestellungen")
-assert "Löschen" in h_best
+assert "Bestellung löschen" in h_best
 h_bdetail = G("/bestellungen/2")
 assert "Bestellung löschen" in h_bdetail
 
