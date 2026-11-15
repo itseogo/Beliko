@@ -10,7 +10,7 @@
 <form method="post" action="{{ url_for('main.ugl_uebernehmen', oid=o.id) }}">
 {{ csrf() }}<input type="hidden" name="token" value="{{ token }}"><input type="hidden" name="dateiname" value="{{ dateiname }}">{% if datei_id %}<input type="hidden" name="datei_id" value="{{ datei_id }}">{% endif %}
 <div class="scroll"><table>
-<thead><tr><th></th><th>Pos.</th><th>Artikelnr.</th><th>Laut Datei</th><th class="r">Menge</th><th>Passende Bestellposition</th><th>Ergebnis</th></tr></thead>
+<thead><tr><th></th><th>Pos.</th><th>Artikelnr.</th><th>Laut Datei</th><th class="r">Menge</th><th>Passende Bestellposition</th><th>Ergebnis</th><th>Aktion</th></tr></thead>
 <tbody>
 {% for z in zeilen %}{% set p = z.p %}
 <tr>
@@ -25,6 +25,40 @@
     {% elif z.art == 'mehr' %}<span class="chip bald">{{ z.rest_ueber|qty }} mehr als offen</span>
     {% elif z.art == 'schon_geliefert' %}<span class="chip bald">schon vollständig geliefert</span>
     {% else %}<span class="chip ueberfaellig">nicht in dieser Bestellung</span>{% endif %}
+  </td>
+  <td>
+    {% if z.art == 'unbekannt' or z.art == 'schon_geliefert' %}
+    <div style="display:inline-flex; align-items:center; gap:.35rem; flex-wrap:nowrap">
+      <select name="proj_{{ p.pos }}" style="font-size:.78rem; padding:.2rem .4rem; border-radius:4px" title="Projekt für Position zuordnen">
+        <option value="">– Kein Projekt –</option>
+        {% for pr in projekte %}
+        <option value="{{ pr.id }}" {{ 'selected' if standard_proj_id == pr.id }}>{{ pr.nummer }} {{ pr.name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" formaction="{{ url_for('main.ugl_position_anlegen', oid=o.id) }}" name="neue_pos" value="{{ p.pos }}" formnovalidate class="btn sek" style="padding:.2rem .55rem; font-size:.78rem; white-space:nowrap; display:inline-flex; align-items:center; gap:.3rem" title="Position zur Bestellung hinzufügen">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        Zur Bestellung hinzufügen
+      </button>
+    </div>
+    {% elif z.art == 'mehr' %}
+    <div style="display:inline-flex; align-items:center; gap:.35rem; flex-wrap:nowrap">
+      <select name="proj_{{ p.pos }}" style="font-size:.78rem; padding:.2rem .4rem; border-radius:4px" title="Projekt für Übermenge zuordnen">
+        <option value="">– Kein Projekt –</option>
+        {% for pr in projekte %}
+        <option value="{{ pr.id }}" {{ 'selected' if standard_proj_id == pr.id }}>{{ pr.nummer }} {{ pr.name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" formaction="{{ url_for('main.ugl_position_anlegen', oid=o.id) }}" name="neue_pos_ueber" value="{{ p.pos }}" formnovalidate class="btn sek" style="padding:.2rem .55rem; font-size:.78rem; white-space:nowrap; display:inline-flex; align-items:center; gap:.3rem" title="Übermenge als neue Position anlegen">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        + {{ z.rest_ueber|qty }} {{ p.einheit }} anlegen
+      </button>
+      <button type="submit" formaction="{{ url_for('main.ugl_menge_anpassen', oid=o.id) }}" name="anpassen_pos" value="{{ p.pos }}" formnovalidate class="btn sek" style="padding:.2rem .55rem; font-size:.78rem; white-space:nowrap" title="Bestellmenge anpassen">
+        Menge anpassen (+{{ z.rest_ueber|qty }})
+      </button>
+    </div>
+    {% else %}
+    <span class="meta">–</span>
+    {% endif %}
   </td>
 </tr>
 {% endfor %}

@@ -90,6 +90,11 @@ P("/bestellungen/neu", {"supplier_id": "1", "bestelldatum": "2026-10-28", "schon
 for a, b, m in [("556023","JUNG Abdeckung","5"),("9104201","PHOE Gehäuse","1")]:
     P("/bestellungen/2/position", {"artikelnr": a, "bezeichnung": b, "menge": m, "project_id": "1"}, page="/bestellungen/2")
 h = P("/bestellungen/2/ugl", {}, page="/bestellungen/2", files={"datei": (io.BytesIO(raw), "B0261027.001")})
+assert "nicht in dieser Bestellung" in h and "Zur Bestellung hinzufügen" in h
+tk = re.search(r'name="token" value="([0-9a-f]{32})"', h).group(1)
+# Position 2 (PROT Geraeteschraube, 100 Stück) direkt zur Bestellung hinzufügen
+h = c.post("/bestellungen/2/ugl/position-anlegen", data={"_csrf": tok(c.get("/bestellungen/2").get_data(as_text=True)), "token": tk, "neue_pos": "2", "proj_2": "1", "dateiname": "B0261027.001"}, follow_redirects=True).get_data(as_text=True)
+assert "zur Bestellung hinzugefügt" in h and "Geraeteschraube" in h and "passt" in h
 tk = re.search(r'name="token" value="([0-9a-f]{32})"', h).group(1)
 h = c.post("/bestellungen/2/ugl/uebernehmen", data={"_csrf": tok(c.get("/bestellungen/2").get_data(as_text=True)), "token": tk, "aktion": "ab", "vermerken": "1", "pos": ["1"]}, follow_redirects=True).get_data(as_text=True)
 assert "Bestätigung vermerkt" in h and "Vom Lieferanten bestätigt (27.10.2026)" in h and "nicht enthalten" in h and "AB 4755816401" in h

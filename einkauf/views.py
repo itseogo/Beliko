@@ -1225,9 +1225,12 @@ def _ugl_vorschau(o, daten, dateiname, datei_id=None):
     if bnr:
         duplikat_ls = (g.db.query(Delivery).join(Order)
                        .filter(Order.supplier_id == o.supplier_id, Delivery.lieferschein_nr == bnr).first())
+    projekte = aktive_projekte()
+    proj_ids = [i.project_id for i in o.items if i.project_id]
+    standard_proj_id = proj_ids[0] if (proj_ids and all(pid == proj_ids[0] for pid in proj_ids)) else None
     return render_template("ugl_vorschau.html", o=o, r=r, zeilen=zeilen, fehlend=fehlend, token=token,
                            dateiname=re.sub(r"[^\w.\- ]", "", dateiname)[:80], datei_id=datei_id,
-                           duplikat_ls=duplikat_ls)
+                           duplikat_ls=duplikat_ls, projekte=projekte, standard_proj_id=standard_proj_id)
 
 
 @main.route("/bestellungen/<int:oid>/ugl-export")
@@ -1327,6 +1330,109 @@ def ugl_uebernehmen(oid):
     g.db.commit()
     pfad.unlink(missing_ok=True)
     return redirect(url_for("main.bestellung_detail", oid=oid))
+
+
+@main.route("/bestellungen/<int:oid>/ugl/position-anlegen", methods=["POST"])
+@edit_required
+def ugl_position_anlegen(oid):
+    o = _bestellung(oid)
+    token = request.form.get("token")
+    pfad = _import_pfad(oid, token)
+    if not pfad.exists():
+        flash("Die Vorschau ist abgelaufen. Bitte die Datei erneut hochladen.", "fehler")
+        return redirect(url_for("main.bestellung_detail", oid=oid))
+    raw_bytes = pfad.read_bytes()
+    r = ugl.lesen(raw_bytes)
+
+    neue_pos_nr = request.form.get("neue_pos", type=int)
+    neue_pos_ueber_nr = request.form.get("neue_pos_ueber", type=int)
+    pos_nr = neue_pos_nr or neue_pos_ueber_nr
+
+    pos_daten = next((p for p in r.get("positionen", []) if p.get("pos") == pos_nr), None)
+    if not pos_daten:
+        flash("Position in der Lieferdatei nicht gefunden.", "fehler")
+        return redirect(url_for("main.bestellung_detail", oid=oid))
+
+    menge = pos_daten.get("menge", Decimal(1))
+    if neue_pos_ueber_nr:
+        zeilen, _ = ugl.abgleichen(r["positionen"], o.items)
+        z = next((row for row in zeilen if row["p"]["pos"] == pos_nr), None)
+        if z and z.get("rest_ueber", 0) > 0:
+            menge = z["rest_ueber"]
+
+    pid = request.form.get(f"proj_{pos_nr}", type=int)
+    project = g.db.get(Project, pid) if pid else None
+
+    text1 = pos_daten.get("text1") or ""
+    text2 = pos_daten.get("text2") or ""
+    bezeichnung = f"{text1} {text2}".strip() or pos_daten.get("artikelnr") or f"Position {pos_nr}"
+
+    neu = OrderItem(
+        order_id=o.id,
+        artikelnr=pos_daten.get("artikelnr") or None,
+        bezeichnung=bezeichnung,
+        menge=menge,
+        einheit=pos_daten.get("einheit") or None,
+        project_id=project.id if project else None,
+    )
+    if neu.artikelnr:
+        vorher = (g.db.query(OrderItem)
+                  .filter(OrderItem.artikelnr == neu.artikelnr, OrderItem.preis.isnot(None))
+                  .order_by(OrderItem.id.desc()).first())
+        if vorher and vorher.preis is not None:
+            neu.preis = vorher.preis
+        else:
+            art = g.db.query(Article).filter(Article.artikelnr == neu.artikelnr).first()
+            if art and art.listenpreis is not None:
+                neu.preis = art.listenpreis
+
+    g.db.add(neu)
+    o.status_aktualisieren()
+    g.db.commit()
+
+    pfad.unlink(missing_ok=True)
+    flash(f"Position '{bezeichnung}' ({_qty_text(menge)} {neu.einheit or ''}) zur Bestellung hinzugefügt.", "ok")
+    dateiname = (request.form.get("dateiname") or "")[:80]
+    datei_id = request.form.get("datei_id", type=int)
+    return _ugl_vorschau(o, raw_bytes, dateiname=dateiname, datei_id=datei_id)
+
+
+@main.route("/bestellungen/<int:oid>/ugl/menge-anpassen", methods=["POST"])
+@edit_required
+def ugl_menge_anpassen(oid):
+    o = _bestellung(oid)
+    token = request.form.get("token")
+    pfad = _import_pfad(oid, token)
+    if not pfad.exists():
+        flash("Die Vorschau ist abgelaufen. Bitte die Datei erneut hochladen.", "fehler")
+        return redirect(url_for("main.bestellung_detail", oid=oid))
+    raw_bytes = pfad.read_bytes()
+    r = ugl.lesen(raw_bytes)
+
+    pos_nr = request.form.get("anpassen_pos", type=int)
+    zeilen, _ = ugl.abgleichen(r["positionen"], o.items)
+    z = next((row for row in zeilen if row["p"]["pos"] == pos_nr), None)
+    if z and z.get("rest_ueber", 0) > 0:
+        item = None
+        if z["zuordnung"]:
+            item = z["zuordnung"][-1][0]
+        elif z.get("kandidaten"):
+            item = z["kandidaten"][-1]
+        if item:
+            alt = item.menge
+            item.menge += z["rest_ueber"]
+            o.status_aktualisieren()
+            g.db.commit()
+            flash(f"Bestellmenge von '{item.bezeichnung}' von {_qty_text(alt)} auf {_qty_text(item.menge)} {item.einheit or ''} angepasst (+{_qty_text(z['rest_ueber'])}).", "ok")
+        else:
+            flash("Passende Bestellposition zum Anpassen nicht gefunden.", "fehler")
+    else:
+        flash("Keine Übermenge zum Anpassen gefunden.", "fehler")
+
+    pfad.unlink(missing_ok=True)
+    dateiname = (request.form.get("dateiname") or "")[:80]
+    datei_id = request.form.get("datei_id", type=int)
+    return _ugl_vorschau(o, raw_bytes, dateiname=dateiname, datei_id=datei_id)
 
 
 # -------------------------------------------------------------- Nummernkreise
