@@ -146,4 +146,29 @@ h_prev = P("/bestellungen/1/datei-zuordnen", {"datei_id": str(sf_id)}, page="/be
 assert "Lieferantendatei prüfen" in h_prev
 assert "LS-9988" in h_prev or "B0261027.001" in h_prev
 
+# Fega-Logik (Auftragsnummer + 01, 02 als Lieferscheinnummer) testen
+from einkauf import ugl
+assert ugl.fega_zerlegen("4774883501") == ("47748835", "01", 1)
+assert ugl.fega_zerlegen("4774883502") == ("47748835", "02", 2)
+assert ugl.fega_zerlegen("47748835") == ("47748835", None, None)
+
+assert ugl.ab_nr_passt("4774883501", "47748835") == (True, "01", 1)
+assert ugl.ab_nr_passt("4774883502", "47748835") == (True, "02", 2)
+assert ugl.ab_nr_passt("4774883502", "4774883501") == (True, "02", 2)
+assert ugl.ab_nr_passt("1122334401", "47748835") == (False, None, None)
+
+assert ugl.bestellnr_passt("B0261113.008", "B261113") is True
+assert ugl.bestellnr_passt("B0261113.008", "B0261113") is True
+assert ugl.bestellnr_passt("anderer_name.txt", "B261113") is False
+
+assert ugl.naechste_lieferschein_nr("47748835", 0) == "4774883501"
+assert ugl.naechste_lieferschein_nr("47748835", 1) == "4774883502"
+assert ugl.naechste_lieferschein_nr("4774883501", 1) == "4774883502"
+
+r_ugl = ugl.lesen(raw)
+assert r_ugl["kopf"]["auftragsnr"] == "47558164"
+assert r_ugl["kopf"]["lieferung_suffix"] == "01"
+assert r_ugl["kopf"]["lieferung_nr"] == 1
+assert r_ugl["kopf"]["ist_lieferschein"] is True
+
 print("NEUE FUNKTIONEN OK")

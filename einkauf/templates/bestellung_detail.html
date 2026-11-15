@@ -50,8 +50,9 @@
   <td>
     {% if i.delivery_items %}
       {% for di in i.delivery_items %}
+        {% set sfx = di.delivery.lieferschein_nr[-2:] if di.delivery.lieferschein_nr and di.delivery.lieferschein_nr|length >= 8 and di.delivery.lieferschein_nr[-2:].isdigit() else None %}
         <div{% if not loop.first %} style="margin-top:.35rem;padding-top:.25rem;border-top:1px dashed var(--line)"{% endif %}>
-          {% if di.delivery.lieferschein_nr %}<span>{{ di.delivery.lieferschein_nr }}</span>{% else %}<span class="meta">ohne Nr.</span>{% endif %}
+          {% if di.delivery.lieferschein_nr %}<span>{{ di.delivery.lieferschein_nr }}</span>{% if sfx %} <span class="chip" style="font-size:.7rem;padding:.05rem .3rem">Lfg. {{ sfx }}</span>{% endif %}{% else %}<span class="meta">ohne Nr.</span>{% endif %}
           {% if di.delivery.datum %}<small class="sub">{{ di.delivery.datum|datum }}</small>{% endif %}
           {% if i.delivery_items|length > 1 %}<small class="meta">({{ di.menge|qty }} {{ i.einheit or '' }})</small>{% endif %}
         </div>
@@ -142,8 +143,8 @@
       <select id="datei-select" name="datei_id" style="flex:1;min-width:18rem" required>
         <option value="">– Abgerufenen Lieferschein / Datei auswählen –</option>
         {% for f in abgerufene_dateien %}
-        <option value="{{ f.id }}">
-          {{ f.name }}{% if f.belegnr %} · Lieferschein {{ f.belegnr }}{% endif %}{% if f.datei_datum %} vom {{ f.datei_datum|datum }}{% endif %}{% if f.positionen %} ({{ f.positionen }} Pos.){% endif %}{% if f.status == 'neu' %} [Neu]{% elif f.status == 'verarbeitet' %} [Verarbeitet]{% endif %}
+        <option value="{{ f.id }}" {{ 'selected' if vorauswahl_datei_id == f.id }}>
+          {% if f.ist_passend %}⭐ [Passend{% if f.lieferung_sfx %}: Lfg. {{ f.lieferung_sfx }}{% endif %}] {% endif %}{{ f.name }}{% if f.belegnr %} · Lieferschein {{ f.belegnr }}{% endif %}{% if f.datei_datum %} vom {{ f.datei_datum|datum }}{% endif %}{% if f.positionen %} ({{ f.positionen }} Pos.){% endif %}{% if f.status == 'neu' %} [Neu]{% elif f.status == 'verarbeitet' %} [Verarbeitet]{% endif %}
         </option>
         {% endfor %}
       </select>
@@ -202,16 +203,19 @@
       </thead>
       <tbody>
         {% for f in abgerufene_dateien %}
-        <tr class="datei-zeile"
+        <tr class="datei-zeile {{ 'sel' if f.ist_passend }}"
             data-suchtext="{{ ((f.name or '') ~ ' ' ~ (f.belegnr or '') ~ ' ' ~ (f.belegart or ''))|lower }}"
             style="cursor:pointer"
             onclick="document.getElementById('datei-select').value='{{ f.id }}'; document.getElementById('dialog-lieferscheine').close(); document.getElementById('datei-select').form.submit()">
           <td><b>{{ f.name }}</b></td>
-          <td>{{ f.belegnr or '–' }}</td>
+          <td>{{ f.belegnr or '–' }}{% if f.lieferung_sfx %}<small class="sub" style="color:var(--blue)">Lfg. {{ f.lieferung_sfx }}</small>{% endif %}</td>
           <td>{{ f.datei_datum|datum or f.abgerufen_am.strftime('%d.%m.%Y') }}</td>
           <td>{{ f.belegart or 'UGL' }}</td>
           <td class="r">{{ f.positionen if f.positionen is not none else '–' }}</td>
-          <td><span class="chip {{ 'bald' if f.status == 'neu' else 'ok' }}">{{ DATEI_STATUS.get(f.status, f.status) }}</span></td>
+          <td>
+            {% if f.ist_passend %}<span class="chip ok" style="margin-right:.25rem">⭐ Passend</span>{% endif %}
+            <span class="chip {{ 'bald' if f.status == 'neu' else 'ok' }}">{{ DATEI_STATUS.get(f.status, f.status) }}</span>
+          </td>
           <td class="r">
             <button type="button" class="btn sek" style="padding:.2rem .6rem;font-size:.85rem">Zuordnen</button>
           </td>
@@ -241,7 +245,8 @@ function lieferscheinFiltern(q) {
 {% if o.deliveries %}
 <h2>Bisherige Lieferungen</h2>
 {% for d in o.deliveries|reverse %}
-<div class="lieferung"><b>{{ d.datum|datum }}</b>{% if d.lieferschein_nr %} · Lieferschein {{ d.lieferschein_nr }}{% endif %}
+{% set sfx = d.lieferschein_nr[-2:] if d.lieferschein_nr and d.lieferschein_nr|length >= 8 and d.lieferschein_nr[-2:].isdigit() else None %}
+<div class="lieferung"><b>{{ d.datum|datum }}</b>{% if d.lieferschein_nr %} · Lieferschein {{ d.lieferschein_nr }}{% if sfx %} <span class="chip" style="font-size:.72rem;padding:.05rem .35rem">Teillieferung {{ sfx }}</span>{% endif %}{% endif %}
 <ul>{% for di in d.items %}<li>{{ di.menge|qty }} × {{ di.item.bezeichnung }}</li>{% endfor %}</ul></div>
 {% endfor %}
 {% endif %}

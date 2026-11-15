@@ -19,7 +19,7 @@
   {% endif %}
 {% endfor %}
 <tr><td>{{ o.bestelldatum|datum }}</td>
-<td><a href="{{ url_for('main.bestellung_detail', oid=o.id) }}">{{ o.bestellnr or ('Nr. ' ~ o.id) }}</a></td>
+<td><a href="{{ url_for('main.bestellung_detail', oid=o.id) }}">{{ o.bestellnr or ('Nr. ' ~ o.id) }}</a>{% if o.ab_nr %}<small class="sub">AB {{ o.ab_nr }}</small>{% endif %}</td>
 <td>{{ o.supplier.name }}</td>
 <td>
   {% for p in projs %}

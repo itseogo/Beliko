@@ -2,7 +2,7 @@
 {% block content %}
 <p class="krumen"><a href="{{ url_for('main.bestellung_detail', oid=o.id) }}">← Abbrechen und zurück zur Bestellung</a></p>
 <h1>Lieferantendatei prüfen</h1>
-<p class="meta">{{ o.supplier.name }} · Datei {{ dateiname }} · Beleg {{ r.kopf.belegnr or '–' }}{% if r.datei.datum %} · Dateidatum {{ r.datei.datum|datum }}{% endif %}{% if r.kopf.datum %} · Belegdatum {{ r.kopf.datum|datum }}{% endif %} · Belegart laut Datei: <b>{{ r.kopf.belegart or '?' }}</b> (Kennung {{ r.datei.kennung or '?' }}) · Version {{ r.kopf.version or '?' }}</p>
+<p class="meta">{{ o.supplier.name }} · Datei {{ dateiname }} · Beleg {{ r.kopf.belegnr or '–' }}{% if r.datei.datum %} · Dateidatum {{ r.datei.datum|datum }}{% endif %}{% if r.kopf.datum %} · Belegdatum {{ r.kopf.datum|datum }}{% endif %} · Belegart laut Datei: <b>{{ r.kopf.belegart or '?' }}</b> (Kennung {{ r.datei.kennung or '?' }}){% if r.kopf.lieferung_suffix %} · <b style="color:var(--text)">Fega Teillieferung {{ r.kopf.lieferung_suffix }} zu Auftrag {{ r.kopf.auftragsnr }}</b>{% endif %} · Version {{ r.kopf.version or '?' }}</p>
 {% if duplikat_ls %}<div class="flash fehler">Achtung: Die Belegnummer <b>{{ r.kopf.belegnr }}</b> wurde bei diesem Lieferanten bereits als Lieferschein-Nr. gebucht (am {{ duplikat_ls.datum|datum }}). Bitte prüfen, um Doppelbuchungen zu vermeiden.</div>{% endif %}
 {% for w in r.warnungen %}<div class="flash warn">{{ w }}</div>{% endfor %}
 <div class="flash">Noch nichts übernommen. Prüfe die Zuordnung, wähle unten aus, was gelten soll, und bestätige dann.</div>
@@ -77,10 +77,16 @@
     {{ field('Lieferschein-Nr. (nur bei Wareneingang)', 'lieferschein_nr', r.kopf.belegnr) }}
     {{ field('Lieferdatum (nur bei Wareneingang)', 'datum', (r.datei.datum or heute).isoformat(), type='date') }}
   </div>
-  <p class="meta">Welche Belegart ist das? Die Datei sagt „{{ r.kopf.belegart or '?' }}“, was nach Auftragsbestätigung klingt, aber nicht sicher ist. Im Zweifel auf dem Beleg des Lieferanten nachsehen.</p>
+  {% if r.kopf.ist_lieferschein and r.kopf.lieferung_suffix %}
+  <p class="meta" style="color:var(--text);font-size:.9rem"><b>Fega-Lieferschein erkannt:</b> Belegnummer <b>{{ r.kopf.belegnr }}</b> entspricht Auftrag <b>{{ r.kopf.auftragsnr }}</b> (Teillieferung <b>{{ r.kopf.lieferung_suffix }}</b>). Beim Buchen wird dieser Wareneingang mit der Lieferscheinnummer übernommen und die Auftragsnummer der Bestellung zugeordnet.</p>
+  {% elif r.kopf.belegart == 'AB' and not r.kopf.ist_lieferschein %}
+  <p class="meta">Die Datei meldet Belegart „AB“ (Auftragsbestätigung). Wenn noch keine Ware geliefert wurde, kannst du sie als Bestätigung vermerken.</p>
+  {% else %}
+  <p class="meta">Prüfe die Belegart (Datei sagt „{{ r.kopf.belegart or '?' }}“, Kennung {{ r.datei.kennung or '?' }}). Bei Wareneingang als Lieferschein buchen.</p>
+  {% endif %}
   <div class="actions">
-    <button class="btn {{ '' if r.kopf.belegart != 'AB' else 'sek' }}" name="aktion" value="lieferschein" onclick="return confirm('Die ausgewählten Mengen als Wareneingang buchen?')">Als Lieferschein buchen (Wareneingang)</button>
-    <button class="btn {{ 'sek' if r.kopf.belegart != 'AB' else '' }}" name="aktion" value="ab">Als Auftragsbestätigung vermerken (nichts buchen)</button>
+    <button class="btn {{ '' if r.kopf.ist_lieferschein or r.kopf.belegart != 'AB' else 'sek' }}" name="aktion" value="lieferschein" onclick="return confirm('Die ausgewählten Mengen als Wareneingang buchen?')">Als Lieferschein buchen (Wareneingang)</button>
+    <button class="btn {{ 'sek' if r.kopf.ist_lieferschein or r.kopf.belegart != 'AB' else '' }}" name="aktion" value="ab">Als Auftragsbestätigung vermerken (nichts buchen)</button>
   </div>
 </div>
 </form>

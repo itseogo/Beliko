@@ -23,7 +23,17 @@
     </div>
   </div>
   {% for o, pos in offene %}
-  <h3 class="gruppe">Bestellung {{ o.bestellnr or ('Nr. ' ~ o.id) }} <small>vom {{ o.bestelldatum|datum }}{% if o.ab_nr %} · AB {{ o.ab_nr }}{% endif %}</small></h3>
+  <h3 class="gruppe" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+    <span>Bestellung {{ o.bestellnr or ('Nr. ' ~ o.id) }} <small>vom {{ o.bestelldatum|datum }}{% if o.ab_nr %} · AB {{ o.ab_nr }}{% endif %}</small></span>
+    {% if o.naechste_fega_nr %}
+    <span style="font-size:.85rem;font-weight:normal">
+      Nächste Lieferschein-Nr. (Lieferung {{ (o.deliveries|length) + 1 }}):
+      <button type="button" class="btn sek" style="padding:.15rem .5rem;font-size:.8rem" onclick="document.querySelector('[name=lieferschein_nr]').value='{{ o.naechste_fega_nr }}'">
+        {{ o.naechste_fega_nr }} übernehmen
+      </button>
+    </span>
+    {% endif %}
+  </h3>
   <div class="scroll"><table class="zeilen">
     <thead><tr><th>Artikel</th><th>Projekt</th><th class="r">Bestellt</th><th class="r">Schon geliefert</th><th class="r">Offen</th><th class="r">Jetzt geliefert</th></tr></thead>
     <tbody>{% for i in pos %}<tr class="{{ i.faellig }}">

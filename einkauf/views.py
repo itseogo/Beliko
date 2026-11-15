@@ -818,14 +818,27 @@ def bestellung_detail(oid):
                           .filter(SupplierFile.supplier_id == o.supplier_id)
                           .filter(or_(SupplierFile.bestell_id.is_(None), SupplierFile.bestell_id == o.id))
                           .filter(SupplierFile.status.in_(("neu", "verarbeitet", "ignoriert")))
-                          .order_by(SupplierFile.status == "neu", SupplierFile.abgerufen_am.desc(), SupplierFile.id.desc())
                           .all())
-    abgerufene_dateien.sort(key=lambda f: (f.status != "neu", -(f.datei_datum.toordinal() if f.datei_datum else 0)))
+    for f in abgerufene_dateien:
+        passt_ab, sfx, idx = ugl.ab_nr_passt(f.belegnr, o.ab_nr)
+        passt_best = ugl.bestellnr_passt(f.name, o.bestellnr)
+        f.ist_passend = bool(passt_ab or passt_best or (f.bestell_id == o.id))
+        f.lieferung_sfx = sfx
+        f.lieferung_nr = idx
+
+    abgerufene_dateien.sort(key=lambda f: (
+        not getattr(f, "ist_passend", False),
+        f.status != "neu",
+        -(f.datei_datum.toordinal() if f.datei_datum else 0),
+        -f.id
+    ))
+    vorauswahl_datei_id = next((f.id for f in abgerufene_dateien if getattr(f, "ist_passend", False) and f.status == "neu"), None)
     ftp_abrufbar = bool(o.supplier and o.supplier.active and not lieferantendateien.pruefen(o.supplier))
 
     return render_template("bestellung_detail.html", o=o, projekte=aktive_projekte(), von_projekt=von_projekt,
                            offene=[i for i in o.items if not i.storniert and i.rest > 0],
                            abgerufene_dateien=abgerufene_dateien,
+                           vorauswahl_datei_id=vorauswahl_datei_id,
                            ftp_abrufbar=ftp_abrufbar,
                            DATEI_STATUS=DATEI_STATUS)
 
@@ -1307,7 +1320,12 @@ def ugl_uebernehmen(oid):
                         if item.rest > 0:
                             item.hinweis = f"Teillieferung vom {ds}, Rest beim Lieferanten in Rückstand"
         o.status_aktualisieren()
-        flash(f"Wareneingang gebucht ({len(d.items)} Buchungen). Status: {BEST_STATUS[o.status]}.", "ok")
+        ls_nr = d.lieferschein_nr or ""
+        basis, sfx, _ = ugl.fega_zerlegen(ls_nr)
+        if not o.ab_nr and basis:
+            o.ab_nr = basis
+        lief_info = f", Lieferschein {ls_nr}" + (f" / Teillieferung {sfx} zu Auftrag {basis}" if (sfx and basis) else "")
+        flash(f"Wareneingang gebucht ({len(d.items)} Buchungen{lief_info}). Status: {BEST_STATUS[o.status]}.", "ok")
     elif aktion == "ab":
         for z in zeilen:
             for item, menge in z["zuordnung"]:
@@ -1874,13 +1892,15 @@ def lieferscheine():
 def _offene_positionen_je_bestellung(lieferant_id):
     orders = (g.db.query(Order).options(
         selectinload(Order.items).selectinload(OrderItem.delivery_items),
-        selectinload(Order.items).joinedload(OrderItem.project))
+        selectinload(Order.items).joinedload(OrderItem.project),
+        selectinload(Order.deliveries))
         .filter(Order.supplier_id == lieferant_id, Order.status.in_(("bestellt", "teilgeliefert")))
         .order_by(Order.bestelldatum, Order.id).all())
     erg = []
     for o in orders:
         pos = [i for i in o.items if not i.storniert and i.rest > 0]
         if pos:
+            o.naechste_fega_nr = ugl.naechste_lieferschein_nr(o.ab_nr, len(o.deliveries))
             erg.append((o, pos))
     return erg
 
@@ -2445,19 +2465,36 @@ DATEI_STATUS = {"neu": "Neu", "verarbeitet": "Verarbeitet", "ignoriert": "Ignori
 
 
 def _bestell_kandidaten(f, daten):
-    """Passende Bestellungen zu einer Lieferantendatei: je mehr offene Positionen mit gleicher Artikelnummer, desto besser."""
+    """Passende Bestellungen zu einer Lieferantendatei: Auftragsnummer (Fega-Schema mit 01/02), Bestellnummer und Artikelabgleich."""
     r = ugl.lesen(daten)
     arts = {ugl.normalisiere(p["artikelnr"]) for p in r["positionen"] if p["artikelnr"]}
     orders = (g.db.query(Order).options(selectinload(Order.items).selectinload(OrderItem.delivery_items))
               .filter(Order.supplier_id == f.supplier_id, Order.status.in_(("neu", "bestellt", "teilgeliefert")))
               .order_by(Order.bestelldatum.desc(), Order.id.desc()).all())
     erg = []
+    belegnr = f.belegnr or r["kopf"].get("belegnr")
+    datei_nr = r["datei"].get("nummer")
     for o in orders:
+        passt_ab, sfx, idx = ugl.ab_nr_passt(belegnr, o.ab_nr)
+        passt_best = ugl.bestellnr_passt(f.name, o.bestellnr, datei_nr)
         treffer = sum(1 for i in o.items if not i.storniert and i.rest > 0 and ugl.normalisiere(i.artikelnr) in arts)
-        if treffer:
-            erg.append({"o": o, "treffer": treffer, "gesamt": len(r["positionen"]),
-                        "offen": sum(1 for i in o.items if not i.storniert and i.rest > 0)})
-    erg.sort(key=lambda e: (-e["treffer"], -e["o"].id))
+        if passt_ab or passt_best or treffer > 0:
+            erg.append({
+                "o": o,
+                "ab_match": passt_ab,
+                "bestellnr_match": passt_best,
+                "lieferung_sfx": sfx,
+                "lieferung_nr": idx,
+                "treffer": treffer,
+                "gesamt": len(r["positionen"]),
+                "offen": sum(1 for i in o.items if not i.storniert and i.rest > 0),
+            })
+    erg.sort(key=lambda e: (
+        not e["ab_match"],
+        not e["bestellnr_match"],
+        -e["treffer"],
+        -e["o"].id,
+    ))
     return r, erg
 
 

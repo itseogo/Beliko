@@ -8,7 +8,7 @@
 
 {% if r %}
 <div class="panel"><table class="kv">
-  <tr><th>Beleg</th><td>{{ r.kopf.belegnr or '–' }} · Belegart laut Datei <b>{{ r.kopf.belegart or '?' }}</b> (Kennung {{ r.datei.kennung or '?' }}) · Version {{ r.kopf.version or '?' }}</td></tr>
+  <tr><th>Beleg</th><td>{{ r.kopf.belegnr or '–' }} · Belegart laut Datei <b>{{ r.kopf.belegart or '?' }}</b> (Kennung {{ r.datei.kennung or '?' }}){% if r.kopf.lieferung_suffix %} · <b style="color:var(--text)">Fega Teillieferung {{ r.kopf.lieferung_suffix }} zu Auftrag {{ r.kopf.auftragsnr }}</b>{% endif %} · Version {{ r.kopf.version or '?' }}</td></tr>
   <tr><th>Datum</th><td>Datei {{ r.datei.datum|datum or '–' }} · Belegdatum {{ r.kopf.datum|datum or '–' }}</td></tr>
   <tr><th>Positionen</th><td>{{ r.positionen|length }}</td></tr></table></div>
 <div class="scroll"><table><thead><tr><th>Pos.</th><th>Artikelnr.</th><th>Bezeichnung</th><th class="r">Menge</th></tr></thead><tbody>
@@ -20,7 +20,11 @@
 <form method="post" action="{{ url_for('main.datei_pruefen', fid=f.id) }}" class="panel">{{ csrf() }}
   <p class="meta">Vorschlag nach gleichen Artikelnummern in noch offenen Positionen. Danach siehst du wie gewohnt eine Vorschau, gebucht wird erst nach deiner Bestätigung.</p>
   {% for k in kandidaten %}<label class="check"><input type="radio" name="bestellung" value="{{ k.o.id }}" {{ 'checked' if loop.first }}>
-    <span><b>{{ k.o.bestellnr or ('Nr. ' ~ k.o.id) }}</b> vom {{ k.o.bestelldatum|datum }} · Status {{ BEST_KURZ[k.o.status] }} · {{ k.treffer }} von {{ k.gesamt }} Positionen der Datei passen zu offenen Positionen{% if k.o.ab_nr %} · AB {{ k.o.ab_nr }}{% endif %}</span></label>{% endfor %}
+    <span><b>{{ k.o.bestellnr or ('Nr. ' ~ k.o.id) }}</b> vom {{ k.o.bestelldatum|datum }} · Status {{ BEST_KURZ[k.o.status] }}
+      {% if k.ab_match %}<span class="chip ok" style="margin-left:.25rem">⭐ Auftrags-Nr. passt{% if k.lieferung_sfx %} (Lieferung {{ k.lieferung_sfx }}){% endif %}</span>
+      {% elif k.bestellnr_match %}<span class="chip ok" style="margin-left:.25rem">⭐ Bestellnummer im Dateinamen</span>{% endif %}
+      · {{ k.treffer }} von {{ k.gesamt }} Positionen der Datei passen zu offenen Positionen{% if k.o.ab_nr %} · AB {{ k.o.ab_nr }}{% endif %}
+    </span></label>{% endfor %}
   <div class="actions"><button class="btn">Mit dieser Bestellung prüfen</button></div>
 </form>
 {% else %}<p class="leer">Keine Bestellung dieses Lieferanten hat offene Positionen mit diesen Artikelnummern. Prüfe, ob die Bestellung schon erfasst ist und die Artikelnummern des Lieferanten trägt.</p>{% endif %}

@@ -36,6 +36,106 @@ def normalisiere(artikelnr):
     return _norm(artikelnr)
 
 
+def fega_zerlegen(nr: str | None) -> tuple[str, str | None, int | None]:
+    """Zerlegt eine Belegnummer wie '4774883501' in (basis_auftragsnr, lieferung_suffix, lieferung_nr).
+
+    Fega hängt an ihre Auftragsnummer (z. B. 47748835) je nach Teillieferung eine 01, 02 usw.
+    als Lieferscheinnummer an:
+      '4774883501' -> ('47748835', '01', 1)
+      '4774883502' -> ('47748835', '02', 2)
+      '47748835'   -> ('47748835', None, None)
+    """
+    if not nr:
+        return ("", None, None)
+    s = str(nr).strip()
+    # Fega-Auftragsnummern haben 8 Ziffern; mit 2-stelligem Lieferschein-Suffix (01, 02, ...) sind es mindestens 10 Ziffern
+    if len(s) >= 10 and s.isdigit():
+        basis, suffix = s[:-2], s[-2:]
+        if suffix in {f"{n:02d}" for n in range(0, 100)}:
+            return (basis, suffix, int(suffix))
+    return (s, None, None)
+
+
+def ab_nr_passt(file_belegnr: str | None, order_ab_nr: str | None) -> tuple[bool, str | None, int | None]:
+    """Prüft, ob eine Belegnummer (z. B. 4774883501) zur Auftragsbestätigung (AB-Nr.) einer Bestellung passt.
+
+    Gibt (passt, lieferung_suffix, lieferung_nr) zurück.
+    """
+    if not file_belegnr or not order_ab_nr:
+        return (False, None, None)
+    f_str = str(file_belegnr).strip()
+    o_str = str(order_ab_nr).strip()
+    if not f_str or not o_str:
+        return (False, None, None)
+
+    f_basis, f_sfx, f_idx = fega_zerlegen(f_str)
+    o_basis, o_sfx, o_idx = fega_zerlegen(o_str)
+
+    # 1. Direkte Übereinstimmung
+    if f_str == o_str:
+        return (True, f_sfx or o_sfx, f_idx or o_idx)
+
+    # 2. File hat Suffix (4774883501), Order hat Basis (47748835)
+    if f_basis and f_basis == o_str:
+        return (True, f_sfx, f_idx)
+
+    # 3. Beide haben dieselbe Basis (z. B. Order wurde mit 4774883500 oder 4774883501 hinterlegt)
+    if f_basis and o_basis and f_basis == o_basis:
+        return (True, f_sfx, f_idx)
+
+    # 4. File-Nummer fängt mit AB-Nummer an (z. B. Order hat 8 Stellen, File hat 10 Stellen)
+    if f_str.startswith(o_str) and len(f_str) in (len(o_str) + 1, len(o_str) + 2):
+        rest = f_str[len(o_str):]
+        if rest.isdigit():
+            return (True, rest.zfill(2), int(rest))
+
+    return (False, None, None)
+
+
+def bestellnr_passt(file_name: str | None, order_bestellnr: str | None, datei_nummer: str | None = None) -> bool:
+    """Prüft, ob die Handwerker-Bestellnummer im Dateinamen oder im UGL-RGD-Kopf vorkommt."""
+    if not order_bestellnr:
+        return False
+    norm_bestell = re.sub(r"[^\w]", "", str(order_bestellnr)).lower()
+    if not norm_bestell or len(norm_bestell) < 3:
+        return False
+
+    varianten = {norm_bestell}
+    if norm_bestell.startswith("b0"):
+        varianten.add("b" + norm_bestell[2:])
+    elif norm_bestell.startswith("b"):
+        varianten.add("b0" + norm_bestell[1:])
+
+    if file_name:
+        norm_file = re.sub(r"[^\w]", "", str(file_name)).lower()
+        if any(v in norm_file for v in varianten):
+            return True
+
+    if datei_nummer:
+        norm_dn = re.sub(r"[^\w]", "", str(datei_nummer)).lower()
+        if any(v in norm_dn or norm_dn in v for v in varianten):
+            return True
+
+    return False
+
+
+def naechste_lieferschein_nr(order_ab_nr: str | None, bisherige_lieferungen_anzahl: int) -> str | None:
+    """Berechnet die nächste Fega-Lieferscheinnummer auf Basis der AB-Nummer und der Lieferungsanzahl.
+
+    Beispiel: AB '47748835', 0 Lieferungen -> '4774883501'
+             AB '47748835', 1 Lieferung   -> '4774883502'
+    """
+    if not order_ab_nr:
+        return None
+    basis, _, _ = fega_zerlegen(order_ab_nr)
+    if not basis or len(basis) < 6:
+        return None
+    index = bisherige_lieferungen_anzahl + 1
+    if index > 99:
+        return None
+    return f"{basis}{index:02d}"
+
+
 def lesen(daten: bytes):
     if not daten or b"\x00" in daten[:200]:
         raise UglFehler("Das ist keine UGL-Textdatei.")
@@ -76,6 +176,23 @@ def lesen(daten: bytes):
             })
     if not ergebnis["positionen"]:
         raise UglFehler("In der Datei wurden keine Positionen (POA) gefunden.")
+
+    # Fega-Logik: Auftragsnummer und Teillieferung (01, 02, ...) ermitteln
+    belegnr = ergebnis["kopf"].get("belegnr") or ""
+    basis, sfx, idx = fega_zerlegen(belegnr)
+    poa_refs = [p.get("verweis", "").split(";")[0] for p in ergebnis["positionen"] if ";" in p.get("verweis", "")]
+    poa_auftrag = poa_refs[0] if poa_refs else None
+
+    auftragsnr = poa_auftrag or basis
+    ergebnis["kopf"]["auftragsnr"] = auftragsnr
+    ergebnis["kopf"]["lieferung_suffix"] = sfx
+    ergebnis["kopf"]["lieferung_nr"] = idx
+    ergebnis["kopf"]["ist_lieferschein"] = (
+        ergebnis["datei"].get("kennung") == "LS"
+        or ergebnis["kopf"].get("belegart") == "LS"
+        or (idx is not None and idx >= 1)
+    )
+
     if ergebnis["kopf"].get("version") not in UNTERSTUETZT:
         ergebnis["warnungen"].append(
             f"Dateiversion {ergebnis['kopf'].get('version') or '?'} ist nicht geprüft. Bitte Vorschau genau ansehen.")
