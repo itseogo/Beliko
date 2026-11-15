@@ -71,8 +71,9 @@ input[type=checkbox]{width:auto}
 .flash{padding:.7rem 1rem;border-radius:6px;margin:0 0 1rem;border:1px solid var(--line);background:var(--panel)}
 .flash.ok{background:var(--green-bg);border-color:var(--green-line)} .flash.fehler{background:var(--red-bg);border-color:var(--red-line);color:var(--red-text)} .flash.warn{background:var(--amber-bg);border-color:var(--amber-line)}
 .tabs{display:flex;gap:.25rem;border-bottom:1px solid var(--line);margin:0 0 1rem}
-.tabs a{padding:.5rem 1rem;border-bottom:3px solid transparent;color:var(--muted)}
-.tabs a.on{border-color:var(--blue);color:var(--ink);font-weight:600}
+.tabs a{padding:.5rem 1rem;border-bottom:3px solid transparent;color:var(--muted);border-radius:6px 6px 0 0;transition:background .15s, color .15s}
+.tabs a:hover{background:var(--tree-hover);color:var(--ink);text-decoration:none}
+.tabs a.on{border-bottom-color:var(--blue);color:var(--blue);background:var(--sel);font-weight:600}
 .eingang{margin:.5rem 0 1rem}
 .lieferung{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.7rem 1rem;margin:.5rem 0}
 .lieferung ul{margin:.3rem 0 0;padding-left:1.2rem}
@@ -85,8 +86,8 @@ pre.detail{white-space:pre-wrap;background:var(--head-bg);border:1px solid var(-
 .tree{background:var(--tree-bg);border-right:1px solid var(--line);padding:1rem .6rem 2rem;position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto}
 .inhalt{min-width:0}
 .top{justify-content:space-between}
-.tree a{color:var(--ink)}
-.tree .on{font-weight:700;color:var(--blue)}
+.tree a{color:var(--ink);text-decoration:none}
+.tree a:hover{text-decoration:none}
 .tree summary{cursor:pointer;padding:.3rem .4rem;border-radius:5px;list-style:none;display:flex;align-items:center;gap:.4rem}
 .tree summary::-webkit-details-marker{display:none}
 .tree summary::before{content:"▸";color:var(--muted);font-size:.8rem;width:.8rem;transition:transform .1s}
@@ -102,6 +103,29 @@ pre.detail{white-space:pre-wrap;background:var(--head-bg);border:1px solid var(-
 .tree .t-item.add{color:var(--blue);margin-top:.2rem}
 .tree .n{margin-left:auto;font-size:.78rem;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:0 .45rem}
 .tree .t-item .n{float:right}
+
+/* Aktiver Menuepunkt in der Seitenleiste */
+.tree a.on,
+.tree summary a.on,
+.tree summary.on a{color:var(--blue);font-weight:700}
+.tree .t-item.on,
+.tree summary.on,
+.tree summary:has(a.on){
+  background:var(--sel);
+  color:var(--blue);
+  font-weight:700;
+  border-left:3px solid var(--blue);
+  border-radius:4px;
+}
+.tree .t-item.on{padding-left:calc(.5rem - 3px)}
+.tree summary.on,
+.tree summary:has(a.on){padding-left:calc(.4rem - 3px)}
+.tree summary.on::before,
+.tree summary:has(a.on)::before{color:var(--blue)}
+.tree summary.on:hover,
+.tree summary:has(a.on):hover,
+.tree .t-item.on:hover{background:var(--sel)}
+.tree .t-item.on .n{background:var(--panel);border-color:var(--blue);color:var(--blue);font-weight:600}
 .krumen{color:var(--muted);margin:0;font-size:.9rem}
 .statusleiste{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;margin:.2rem 0 1rem}
 .statusleiste form{display:flex;gap:.5rem;align-items:center;margin:0 0 0 auto}

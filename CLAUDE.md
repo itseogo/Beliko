@@ -279,6 +279,7 @@ Echte Dateien des Lieferanten nicht ins Paket legen; `tests/make_ugl.py` baut ei
 
 ## 10. Versionsverlauf
 - **1.3.1**
+  - **Aktiver Menüpunkt & Reiter:** Aktive Menüpunkte im Navigationsbaum links (`.tree .on`, `summary.on`, `a.on`) und Tabs (`.tabs a.on`) werden nun mit hellerem Hintergrund (`--sel`), 3px blauem Markierungsbalken links (`border-left: 3px solid var(--blue)`) und blauer Fett-Schrift deutlich hervorgehoben (sowohl im Dark- als auch Light-Mode), sodass die aktuelle Position/Seite sofort ersichtlich ist.
   - **Passwörter:** Mindestlänge für Benutzer- und Admin-Passwörter von 8 auf **6 Zeichen** herabgesetzt (in `/setup`, `/konto`, `/einstellungen/benutzer`).
   - **Projekte & Bestellungen löschen:** Stift-Icon (✏️) zum Bearbeiten und rotes Mülleimer-Icon (🗑️) zum Löschen (mit `confirm()`-Sicherheitsabfrage) direkt in den Zeilen von `/projekte` und `/bestellungen`; Lösch-Buttons mit Bestätigung auf Detailseiten.
   - **Datenbank-Migration / Übertragungstool (SQLite → MariaDB):** `datenbank_kopieren.py` (Aufruf `python -m einkauf.datenbank_kopieren` zum Übertragen aller 20 Tabellen mit Foreign-Key-Bypass, `--zurueck-zu-sqlite` für schnellen Rollback) sowie automatische Übertragungs-Checkbox unter `/einstellungen/datenbank`.
