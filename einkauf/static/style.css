@@ -200,12 +200,36 @@ td.aktionen{display:flex;gap:.5rem;flex-wrap:wrap}
 td.aktionen form{margin:0}
 ol.liste,ul.liste{padding-left:1.3rem;margin:.4rem 0}
 
-/* Kopfzeile: Name und Neu-Menü */
+/* Kopfzeile: Name und Firma */
 .top .firma{color:var(--top-fg);opacity:.75;font-size:.9rem}
+
+/* Neu-Menue (in der linken Seitenleiste prominent ueber der Navigation, wie Lexoffice) */
 details.neu-menu{position:relative}
 details.neu-menu>summary{list-style:none;cursor:pointer;display:inline-flex;gap:.4rem;align-items:center;padding:.4rem .9rem}
 details.neu-menu>summary::-webkit-details-marker{display:none}
 details.neu-menu .btn{background:var(--btn-bg);color:var(--btn-fg);border-color:var(--btn-bg)}
-ul.neu-liste{position:absolute;left:0;top:calc(100% + .35rem);z-index:20;margin:0;padding:.3rem;list-style:none;min-width:15rem;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+ul.neu-liste{position:absolute;left:0;top:calc(100% + .35rem);z-index:100;margin:0;padding:.3rem;list-style:none;min-width:15rem;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
 ul.neu-liste a{display:block;padding:.55rem .8rem;border-radius:6px;color:var(--ink)}
 ul.neu-liste a:hover,ul.neu-liste a:focus{background:var(--hover);text-decoration:none}
+
+.tree details.neu-menu{margin:0 0 1rem;position:relative}
+.tree details.neu-menu>summary{
+  width:100%;
+  display:flex;
+  align-items:center;
+  gap:.4rem;
+  padding:.55rem .85rem;
+  box-sizing:border-box;
+  font-weight:600;
+  font-size:.95rem;
+  border-radius:6px;
+  background:var(--btn-bg);
+  color:var(--btn-fg);
+  border:1px solid var(--btn-bg);
+  box-shadow:0 1px 3px rgba(0,0,0,.2);
+  transition:background .15s, border-color .15s;
+}
+.tree details.neu-menu>summary::before{content:"+";font-size:1.25rem;font-weight:700;line-height:1;margin-right:.1rem}
+.tree details.neu-menu>summary:hover{background:var(--btn-bg-h);border-color:var(--btn-bg-h);text-decoration:none}
+.tree details.neu-menu>summary .pfeil{margin-left:auto;font-size:.75rem;opacity:.85}
+.tree ul.neu-liste{width:100%;min-width:100%;box-sizing:border-box}

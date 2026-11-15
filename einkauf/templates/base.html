@@ -15,6 +15,18 @@
 <div class="{{ 'app' if g.user else '' }}">
 {% if g.user and baum_best is defined %}
 <aside class="tree">
+  {% if g.user.role != 'leser' %}
+  <details class="neu-menu" id="neu-menu">
+    <summary class="btn neu-knopf" aria-haspopup="true">Neu <span aria-hidden="true" class="pfeil">▾</span></summary>
+    <ul class="neu-liste" role="menu">
+      <li role="none"><a role="menuitem" href="{{ url_for('main.bestellung_neu') }}">Bestellung</a></li>
+      <li role="none"><a role="menuitem" href="{{ url_for('main.lieferschein_neu') }}">Lieferschein</a></li>
+      <li role="none"><a role="menuitem" href="{{ url_for('main.ids_seite') }}">Aus IDS übernehmen</a></li>
+      <li role="none"><a role="menuitem" href="{{ url_for('main.projekt_neu') }}">Projekt anlegen</a></li>
+      <li role="none"><a role="menuitem" href="{{ url_for('main.kontakt_neu') }}">Kontakt anlegen</a></li>
+    </ul>
+  </details>
+  {% endif %}
   <nav aria-label="Navigation">
     <a class="t-item top-l {{ 'on' if ep == 'main.dashboard' }}" href="{{ url_for('main.dashboard') }}">Übersicht</a>
 
@@ -80,19 +92,9 @@
 <div class="inhalt">
 {% if g.user %}
 <header class="top">
-  <a class="brand" href="{{ url_for('main.dashboard') }}" title="BestellLieferKontrolle">BeLiKo</a>{% if firma %}<span class="firma">{{ firma }}</span>{% endif %}
-  {% if g.user.role != 'leser' %}
-  <details class="neu-menu" id="neu-menu">
-    <summary class="btn neu-knopf" aria-haspopup="true">Neu <span aria-hidden="true">▾</span></summary>
-    <ul class="neu-liste" role="menu">
-      <li role="none"><a role="menuitem" href="{{ url_for('main.bestellung_neu') }}">Bestellung</a></li>
-      <li role="none"><a role="menuitem" href="{{ url_for('main.lieferschein_neu') }}">Lieferschein</a></li>
-      <li role="none"><a role="menuitem" href="{{ url_for('main.ids_seite') }}">Aus IDS übernehmen</a></li>
-      <li role="none"><a role="menuitem" href="{{ url_for('main.projekt_neu') }}">Projekt anlegen</a></li>
-      <li role="none"><a role="menuitem" href="{{ url_for('main.kontakt_neu') }}">Kontakt anlegen</a></li>
-    </ul>
-  </details>
-  {% endif %}
+  <div class="brand-wrap">
+    <a class="brand" href="{{ url_for('main.dashboard') }}" title="BestellLieferKontrolle">BeLiKo</a>{% if firma %}<span class="firma">{{ firma }}</span>{% endif %}
+  </div>
   <div class="user">
     <a href="{{ url_for('main.konto') }}">{{ g.user.username }}</a>
     <form method="post" action="{{ url_for('main.logout') }}">{% from '_m.html' import csrf with context %}{{ csrf() }}<button class="link">Abmelden</button></form>

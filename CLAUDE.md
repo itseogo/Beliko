@@ -282,6 +282,7 @@ Echte Dateien des Lieferanten nicht ins Paket legen; `tests/make_ugl.py` baut ei
 
 ## 10. Versionsverlauf
 - **1.3.1**
+  - **Neu-Button in der linken Seitenleiste (wie Lexoffice):** Der „Neu ▾“-Button wurde aus der oberen Leiste an die Spitze der linken Seitenleiste (über „Übersicht“) verlegt – analog zum Vorbild in Lexoffice prominent über die gesamte Navigationsbreite mit „+ Neu ▾“ und aufklappbarem Menü (Bestellung, Lieferschein, IDS, Projekt anlegen, Kontakt anlegen).
   - **Projektansicht: Reiter „Vorgang“ mit Blöcken Angebot, Bestellung, Rechnung:** Der bisherige Reiter „Bestellungen“ heißt nun **„Vorgang“** und integriert den früheren separaten Reiter „Angebote / Rechnungen“. Die Projektvorgänge sind nun chronologisch untereinander in 3 Blöcken gegliedert:
     1. **Angebot:** Zugeordnete Lexoffice-Angebote/Aufträge mit Materialwert, Status, Lösen-Button und Schnellauswahl für freie Angebote.
     2. **Bestellung:** Bestellungen an Lieferanten (nach Status gegliedert) mit Button „+ Neue Bestellung“ (mit vorausgewähltem Projekt).
