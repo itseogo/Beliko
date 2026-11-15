@@ -397,9 +397,11 @@ def projekte():
     status = request.args.get("status", "laufend")
     suche = (request.args.get("q") or "").strip()
     sel = request.args.get("p", type=int)
-    tab = request.args.get("tab", "bestellungen")
-    if tab not in ("uebersicht", "bestellungen", "material", "lexoffice"):
-        tab = "bestellungen"
+    tab = request.args.get("tab", "vorgang")
+    if tab in ("bestellungen", "lexoffice"):
+        tab = "vorgang"
+    if tab not in ("uebersicht", "vorgang", "material"):
+        tab = "vorgang"
     q = g.db.query(Project).options(
         selectinload(Project.items).selectinload(OrderItem.delivery_items),
         selectinload(Project.items).joinedload(OrderItem.order),
@@ -413,7 +415,7 @@ def projekte():
         q = q.filter(or_(Project.nummer.like(like), Project.name.like(like), Project.kunde.like(like)))
     liste = q.order_by(Project.nummer).all()
 
-    p, gruppen, items, belege_frei = None, {}, [], []
+    p, gruppen, items, belege_frei, belege_frei_angebote, belege_frei_rechnungen = None, {}, [], [], [], []
     if sel:
         p = (g.db.query(Project).options(
             selectinload(Project.items).selectinload(OrderItem.delivery_items),
@@ -437,8 +439,11 @@ def projekte():
                            .order_by(LexDocument.datum.desc(), LexDocument.id.desc()).all())
             if p.contact_id:
                 belege_frei.sort(key=lambda d: (d.contact_id != p.contact_id, -(d.datum.toordinal() if d.datum else 0), -d.id))
+            belege_frei_angebote = [d for d in belege_frei if d.typ in ("angebot", "auftrag")]
+            belege_frei_rechnungen = [d for d in belege_frei if d.typ not in ("angebot", "auftrag")]
     return render_template("projekte.html", projekte=liste, status=status, suche=suche, p=p, tab=tab,
                            gruppen=gruppen, items=items, belege_frei=belege_frei,
+                           belege_frei_angebote=belege_frei_angebote, belege_frei_rechnungen=belege_frei_rechnungen,
                            STATUS=STATUS, BELEG_TYPEN=BELEG_TYPEN, BELEG_STATUS=BELEG_STATUS, BUDGET_MODI=BUDGET_MODI)
 
 
@@ -644,7 +649,7 @@ def projekt_beleg_zuordnen(pid):
             doc.project_id = p.id
             flash(f"Beleg {doc.nummer or doc.id} zugeordnet.", "ok")
         g.db.commit()
-    return redirect(url_for("main.projekte", p=p.id, tab="lexoffice", status="alle"))
+    return redirect(url_for("main.projekte", p=p.id, tab="vorgang", status="alle"))
 
 
 @main.route("/projekte/<int:pid>/loeschen", methods=["POST"])
@@ -743,7 +748,7 @@ def bestellung_neu():
     fehler, zeilen, ids_info = None, [], None
     ids_token = request.values.get("ids") or request.form.get("ids_token") or ""
     werte = {"supplier_id": "", "bestelldatum": date.today().isoformat(), "bestellnr": "", "ab_nr": "", "wunschtermin": "",
-             "notiz": "", "schon_bestellt": False, "projekt_alle": ""}
+             "notiz": "", "schon_bestellt": False, "projekt_alle": request.args.get("p") or request.args.get("projekt_alle") or ""}
 
     if request.method == "POST":
         werte = {k: (request.form.get(k) or "").strip() for k in ("supplier_id", "bestelldatum", "bestellnr", "ab_nr", "wunschtermin", "notiz", "projekt_alle")}

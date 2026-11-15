@@ -81,8 +81,11 @@ Der letzte aktive Admin ist geschützt.
 mehrere Projekte = zweite Position mit gleicher Artikelnummer (`position_aufteilen`). Der UGL-Import verteilt
 gelieferte Mengen automatisch auf mehrere Positionen mit gleicher Artikelnummer.
 
-**Projektansicht:** `/projekte?p=<id>&tab=bestellungen|material|uebersicht` – Liste oben, Reiter unten, Wechsel per
-Seitenaufruf. Bestellung öffnet mit `?von=<projekt>` und „Zurück zum Projekt“.
+**Projektansicht:** `/projekte?p=<id>&tab=vorgang|material|uebersicht` – Liste oben, Reiter unten, Wechsel per
+Seitenaufruf. Der Reiter **Vorgang** (Standard) fasst die Vorgänge in 3 Blöcken zusammen: **Angebot** (Lexoffice-Angebote/Aufträge),
+**Bestellung** (Bestellungen an Lieferanten) und **Rechnung** (Lexoffice-Ausgangs- und Eingangsrechnungen).
+Alte Links mit `tab=bestellungen` und `tab=lexoffice` werden automatisch auf `tab=vorgang` abgebildet.
+Bestellung öffnet mit `?von=<projekt>` und „Zurück zum Projekt“.
 
 ## 5b. Kontakte und Nummernkreise (ab 0.6)
 **Kontakte** (Menü/Baum „Kontakte“, Alle/Kunden/Lieferanten): Feldsatz an die Kontakte von Lexoffice/Lexware Office angelehnt
@@ -279,6 +282,11 @@ Echte Dateien des Lieferanten nicht ins Paket legen; `tests/make_ugl.py` baut ei
 
 ## 10. Versionsverlauf
 - **1.3.1**
+  - **Projektansicht: Reiter „Vorgang“ mit Blöcken Angebot, Bestellung, Rechnung:** Der bisherige Reiter „Bestellungen“ heißt nun **„Vorgang“** und integriert den früheren separaten Reiter „Angebote / Rechnungen“. Die Projektvorgänge sind nun chronologisch untereinander in 3 Blöcken gegliedert:
+    1. **Angebot:** Zugeordnete Lexoffice-Angebote/Aufträge mit Materialwert, Status, Lösen-Button und Schnellauswahl für freie Angebote.
+    2. **Bestellung:** Bestellungen an Lieferanten (nach Status gegliedert) mit Button „+ Neue Bestellung“ (mit vorausgewähltem Projekt).
+    3. **Rechnung:** Zugeordnete Lexoffice-Rechnungen (Ausgangs- und Eingangsrechnungen) mit Nettosumme, Lösen-Button und Schnellauswahl für freie Rechnungen.
+    Volle Abwärtskompatibilität: Aufrufe mit `tab=bestellungen` und `tab=lexoffice` zeigen automatisch den Vorgang-Reiter.
   - **Aktiver Menüpunkt & Reiter:** Aktive Menüpunkte im Navigationsbaum links (`.tree .on`, `summary.on`, `a.on`) und Tabs (`.tabs a.on`) werden nun mit hellerem Hintergrund (`--sel`), 3px blauem Markierungsbalken links (`border-left: 3px solid var(--blue)`) und blauer Fett-Schrift deutlich hervorgehoben (sowohl im Dark- als auch Light-Mode), sodass die aktuelle Position/Seite sofort ersichtlich ist.
   - **Passwörter:** Mindestlänge für Benutzer- und Admin-Passwörter von 8 auf **6 Zeichen** herabgesetzt (in `/setup`, `/konto`, `/einstellungen/benutzer`).
   - **Projekte & Bestellungen löschen:** Stift-Icon (✏️) zum Bearbeiten und rotes Mülleimer-Icon (🗑️) zum Löschen (mit `confirm()`-Sicherheitsabfrage) direkt in den Zeilen von `/projekte` und `/bestellungen`; Lösch-Buttons mit Bestätigung auf Detailseiten.

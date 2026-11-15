@@ -81,8 +81,8 @@
   </div>
   {% endif %}</div>
 <div class="tabs">
-  {% for k, t in [('bestellungen', 'Bestellungen'), ('material', 'Material'), ('lexoffice', 'Angebote / Rechnungen'), ('uebersicht', 'Übersicht')] %}
-  <a class="{{ 'on' if tab == k }}" href="{{ url_for('main.projekte', p=p.id, tab=k, status=status, q=suche or None) }}#unten">{{ t }}{% if k == 'lexoffice' and p.lex_documents %} ({{ p.lex_documents|length }}){% endif %}</a>{% endfor %}
+  {% for k, t in [('vorgang', 'Vorgang'), ('material', 'Material'), ('uebersicht', 'Übersicht')] %}
+  <a class="{{ 'on' if tab == k or (k == 'vorgang' and tab in ['bestellungen', 'lexoffice']) }}" href="{{ url_for('main.projekte', p=p.id, tab=k, status=status, q=suche or None) }}#unten">{{ t }}</a>{% endfor %}
 </div>
 
 {% if tab == 'uebersicht' %}
@@ -93,52 +93,11 @@
   <div class="kpi"><b>{{ s.offen }}</b><span>offene Positionen</span></div>
 </div>
 {% if s.modus != 'manuell' %}<p class="meta">Budget-Modus: <b>{{ BUDGET_MODI[s.modus] }}</b>{% if s.modus == 'faktor' %} (Faktor {{ (p.budget_faktor or 1)|qty }}){% endif %} · Warensumme aus {{ s.angebote_n }} Angebot(en): {{ s.warensumme|money }}.</p>{% endif %}
-{% if s.unklar_pos %}<div class="flash warn">{{ s.unklar_pos }} Angebotsposition(en) haben noch keine Kostenart („unklar“) und fehlen deshalb in der Warensumme. <a href="{{ url_for('main.projekte', p=p.id, tab='lexoffice', status=status, q=suche or None) }}#unten">Jetzt zuordnen</a></div>{% endif %}
+{% if s.unklar_pos %}<div class="flash warn">{{ s.unklar_pos }} Angebotsposition(en) haben noch keine Kostenart („unklar“) und fehlen deshalb in der Warensumme. <a href="{{ url_for('main.projekte', p=p.id, tab='vorgang', status=status, q=suche or None) }}#unten">Jetzt zuordnen</a></div>{% endif %}
 {% if s.prozent is not none %}<div class="balken"><i class="{{ 'rot' if s.prozent > 100 else ('gelb' if s.prozent >= 80 else '') }}" style="width: {{ [s.prozent, 100]|min }}%"></i></div>{% endif %}
 {% if s.ohne_preis %}<div class="flash warn">{{ s.ohne_preis }} Positionen haben keinen Preis und fehlen deshalb in der Summe.</div>{% endif %}
 {% if s.entwurf %}<div class="flash warn">{{ s.entwurf }} Positionen stehen in Bestellungen mit Status „Neu“ und sind in den Summen noch nicht enthalten.</div>{% endif %}
 {% if p.notiz %}<p>{{ p.notiz }}</p>{% else %}<p class="meta">Keine Notiz.</p>{% endif %}
-
-{% elif tab == 'lexoffice' %}
-<div class="kpis">
-  <div class="kpi"><b>{{ s.warensumme|money }}</b><span>Warensumme aus Angeboten</span></div>
-  <div class="kpi"><b>{{ s.budget|money if s.budget is not none else '–' }}</b><span>Materialbudget ({{ BUDGET_MODI[s.modus] }})</span></div>
-  <div class="kpi"><b>{{ s.bestellt|money }}</b><span>bestellt (netto)</span></div>
-  <div class="kpi {{ 'rot' if s.rest is not none and s.rest < 0 }}"><b>{{ s.rest|money if s.rest is not none else '–' }}</b><span>Differenz (Budget − Bestellt)</span></div>
-</div>
-{% if s.rechnungen_summe %}<p class="meta">Summe verknüpfter Rechnungen (netto): <b>{{ s.rechnungen_summe|money }}</b>.</p>{% endif %}
-{% if s.unklar_pos %}<div class="flash warn">{{ s.unklar_pos }} Angebotsposition(en) sind noch als „unklar“ markiert. Öffne das Angebot unten, um die Kostenarten festzulegen.</div>{% endif %}
-
-{% if p.lex_documents %}
-<div class="scroll"><table>
-  <thead><tr><th>Typ</th><th>Nummer</th><th>Datum</th><th>Titel / Kunde</th><th>Status</th><th class="r">Netto</th><th class="r">Materialwert</th><th></th></tr></thead>
-  <tbody>{% for d in p.lex_documents %}<tr>
-    <td><span class="chip">{{ BELEG_TYPEN.get(d.typ, d.typ) }}</span></td>
-    <td><a href="{{ url_for('main.lex_beleg_detail', did=d.id, von=p.id) }}">{{ d.nummer or ('Beleg #' ~ d.id) }}</a></td>
-    <td>{{ d.datum|datum }}</td>
-    <td>{{ d.titel or d.kunde_name or '–' }}</td>
-    <td>{{ BELEG_STATUS.get(d.status, d.status or '–') }}</td>
-    <td class="r">{{ d.netto|money if d.netto is not none else '–' }}</td>
-    <td class="r">{{ d.materialwert|money }}{% if d.unklar_anzahl %} <span class="chip bald">{{ d.unklar_anzahl }} unklar</span>{% endif %}</td>
-    <td>{% if g.user.role != 'leser' %}
-      <form method="post" action="{{ url_for('main.projekt_beleg_zuordnen', pid=p.id) }}" style="display:inline">
-        {{ csrf() }}<input type="hidden" name="document_id" value="{{ d.id }}"><input type="hidden" name="aktion" value="loesen">
-        <button class="btn sek">Lösen</button>
-      </form>{% endif %}</td>
-  </tr>{% endfor %}</tbody>
-</table></div>
-{% else %}<p class="leer">Diesem Projekt sind noch keine Lexoffice-Belege zugeordnet.</p>{% endif %}
-
-{% if g.user.role != 'leser' and belege_frei %}
-<form method="post" action="{{ url_for('main.projekt_beleg_zuordnen', pid=p.id) }}" class="leiste" style="margin-top:1rem">
-  {{ csrf() }}
-  <label class="f" style="min-width:20rem"><span>Lexoffice-Beleg zuordnen</span>
-    <select name="document_id">
-      {% for d in belege_frei %}<option value="{{ d.id }}">{{ BELEG_TYPEN.get(d.typ, d.typ) }} {{ d.nummer or '' }} · {{ d.datum|datum }} · {{ d.kunde_name or '–' }} ({{ d.netto|money if d.netto is not none else '–' }})</option>{% endfor %}
-    </select></label>
-  <button class="btn sek">Zuordnen</button>
-</form>
-{% endif %}
 
 {% elif tab == 'material' %}
 {% if items %}
@@ -154,18 +113,134 @@
 {% else %}<p class="leer">Diesem Projekt ist noch kein Material zugeordnet. Beim Erfassen einer Bestellposition wählst du das Projekt aus.</p>{% endif %}
 
 {% else %}
+{# Tab 'vorgang' (Standard): 3 Bloecke -> Angebot, Bestellung, Rechnung #}
+{% set angebote = p.lex_documents|selectattr('typ', 'in', ['angebot', 'auftrag'])|list if p.lex_documents else [] %}
+{% set rechnungen = p.lex_documents|rejectattr('typ', 'in', ['angebot', 'auftrag'])|list if p.lex_documents else [] %}
 {% set gesamt = namespace(n=0) %}{% for lst in gruppen.values() %}{% set gesamt.n = gesamt.n + lst|length %}{% endfor %}
-{% if gesamt.n %}
-{% for key, lst in gruppen.items() if lst %}
-<h3 class="gruppe"><span class="chip s-{{ key }}">{{ BEST_STATUS[key] }}</span> <small>{{ lst|length }}</small></h3>
-<div class="scroll"><table>
-<thead><tr><th>Datum</th><th>Bestellnr.</th><th>Lieferant</th><th class="r">Positionen</th><th class="r">davon offen</th><th class="r">Summe (dieses Projekt)</th></tr></thead>
-<tbody>{% for e in lst %}<tr>
-  <td>{{ e.o.bestelldatum|datum }}</td>
-  <td><a href="{{ url_for('main.bestellung_detail', oid=e.o.id, von=p.id) }}">{{ e.o.bestellnr or ('Nr. ' ~ e.o.id) }}</a></td>
-  <td>{{ e.o.supplier.name }}</td><td class="r">{{ e.pos|length }}</td><td class="r">{{ e.offen }}</td><td class="r">{{ e.summe|money }}</td></tr>{% endfor %}</tbody></table></div>
-{% endfor %}
-{% else %}<p class="leer">Für dieses Projekt gibt es noch keine Bestellungen.{% if g.user.role != 'leser' %} Lege über „Neu“ oben eine an.{% endif %}</p>{% endif %}
+
+{% if s.unklar_pos %}<div class="flash warn">{{ s.unklar_pos }} Angebotsposition(en) sind noch als „unklar“ markiert. Öffne das Angebot unten, um die Kostenarten festzulegen.</div>{% endif %}
+
+<!-- 1. Block: Angebot -->
+<div class="vorgang-block" style="margin-bottom:2.2rem">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:.6rem; padding-bottom:.35rem; border-bottom:1px solid var(--line)">
+    <h3 style="margin:0; font-size:1.15rem; display:flex; align-items:center; gap:.5rem">
+      <span>Angebot</span>
+      {% if angebote %}<span class="n" style="font-size:.78rem; padding:0 .5rem; border-radius:999px; background:var(--panel); border:1px solid var(--line); color:var(--muted)">{{ angebote|length }}</span>{% endif %}
+    </h3>
+  </div>
+
+  {% if angebote %}
+  <div class="scroll"><table>
+    <thead><tr><th>Typ</th><th>Nummer</th><th>Datum</th><th>Titel / Kunde</th><th>Status</th><th class="r">Netto</th><th class="r">Materialwert</th>{% if g.user.role != 'leser' %}<th style="width:1%"></th>{% endif %}</tr></thead>
+    <tbody>{% for d in angebote %}<tr>
+      <td><span class="chip">{{ BELEG_TYPEN.get(d.typ, d.typ) }}</span></td>
+      <td><a href="{{ url_for('main.lex_beleg_detail', did=d.id, von=p.id) }}">{{ d.nummer or ('Beleg #' ~ d.id) }}</a></td>
+      <td>{{ d.datum|datum }}</td>
+      <td>{{ d.titel or d.kunde_name or '–' }}</td>
+      <td>{{ BELEG_STATUS.get(d.status, d.status or '–') }}</td>
+      <td class="r">{{ d.netto|money if d.netto is not none else '–' }}</td>
+      <td class="r">{{ d.materialwert|money }}{% if d.unklar_anzahl %} <span class="chip bald">{{ d.unklar_anzahl }} unklar</span>{% endif %}</td>
+      {% if g.user.role != 'leser' %}<td>
+        <form method="post" action="{{ url_for('main.projekt_beleg_zuordnen', pid=p.id) }}" style="display:inline">
+          {{ csrf() }}<input type="hidden" name="document_id" value="{{ d.id }}"><input type="hidden" name="aktion" value="loesen">
+          <button class="btn sek" style="padding:.2rem .55rem; font-size:.8rem" title="Vom Projekt lösen">Lösen</button>
+        </form></td>{% endif %}
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}
+  <p class="leer" style="padding:.8rem; margin:0">Diesem Projekt ist noch kein Angebot zugeordnet.</p>
+  {% endif %}
+
+  {% if g.user.role != 'leser' and belege_frei_angebote %}
+  <form method="post" action="{{ url_for('main.projekt_beleg_zuordnen', pid=p.id) }}" class="leiste" style="margin-top:.6rem; gap:.5rem">
+    {{ csrf() }}
+    <label class="f" style="min-width:18rem; margin:0">
+      <select name="document_id" style="font-size:.85rem; padding:.3rem .5rem">
+        <option value="" disabled selected>-- Lexoffice-Angebot auswählen --</option>
+        {% for d in belege_frei_angebote %}
+        <option value="{{ d.id }}">{{ BELEG_TYPEN.get(d.typ, d.typ) }} {{ d.nummer or '' }} · {{ d.datum|datum }} · {{ d.kunde_name or '–' }} ({{ d.netto|money if d.netto is not none else '–' }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn sek" style="font-size:.85rem; padding:.3rem .7rem">+ Angebot zuordnen</button>
+  </form>
+  {% endif %}
+</div>
+
+<!-- 2. Block: Bestellung -->
+<div class="vorgang-block" style="margin-bottom:2.2rem">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:.6rem; padding-bottom:.35rem; border-bottom:1px solid var(--line)">
+    <h3 style="margin:0; font-size:1.15rem; display:flex; align-items:center; gap:.5rem">
+      <span>Bestellung</span>
+      {% if gesamt.n %}<span class="n" style="font-size:.78rem; padding:0 .5rem; border-radius:999px; background:var(--panel); border:1px solid var(--line); color:var(--muted)">{{ gesamt.n }}</span>{% endif %}
+    </h3>
+    {% if g.user.role != 'leser' %}
+    <a class="btn sek" style="font-size:.85rem; padding:.25rem .7rem" href="{{ url_for('main.bestellung_neu', p=p.id) }}">+ Neue Bestellung</a>
+    {% endif %}
+  </div>
+
+  {% if gesamt.n %}
+  {% for key, lst in gruppen.items() if lst %}
+  <h4 class="gruppe" style="margin:.8rem 0 .3rem; font-size:.95rem"><span class="chip s-{{ key }}">{{ BEST_STATUS[key] }}</span> <small>{{ lst|length }}</small></h4>
+  <div class="scroll"><table>
+  <thead><tr><th>Datum</th><th>Bestellnr.</th><th>Lieferant</th><th class="r">Positionen</th><th class="r">davon offen</th><th class="r">Summe (dieses Projekt)</th></tr></thead>
+  <tbody>{% for e in lst %}<tr>
+    <td>{{ e.o.bestelldatum|datum }}</td>
+    <td><a href="{{ url_for('main.bestellung_detail', oid=e.o.id, von=p.id) }}">{{ e.o.bestellnr or ('Nr. ' ~ e.o.id) }}</a></td>
+    <td>{{ e.o.supplier.name }}</td><td class="r">{{ e.pos|length }}</td><td class="r">{{ e.offen }}</td><td class="r">{{ e.summe|money }}</td></tr>{% endfor %}</tbody></table></div>
+  {% endfor %}
+  {% else %}
+  <p class="leer" style="padding:.8rem; margin:0">Für dieses Projekt gibt es noch keine Bestellungen.{% if g.user.role != 'leser' %} <a href="{{ url_for('main.bestellung_neu', p=p.id) }}">Jetzt anlegen</a>.{% endif %}</p>
+  {% endif %}
+</div>
+
+<!-- 3. Block: Rechnung -->
+<div class="vorgang-block" style="margin-bottom:1.5rem">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:.6rem; padding-bottom:.35rem; border-bottom:1px solid var(--line)">
+    <h3 style="margin:0; font-size:1.15rem; display:flex; align-items:center; gap:.5rem">
+      <span>Rechnung</span>
+      {% if rechnungen %}<span class="n" style="font-size:.78rem; padding:0 .5rem; border-radius:999px; background:var(--panel); border:1px solid var(--line); color:var(--muted)">{{ rechnungen|length }}</span>{% endif %}
+    </h3>
+    {% if s.rechnungen_summe %}<span class="meta" style="font-size:.85rem">Summe verknüpfter Rechnungen: <b>{{ s.rechnungen_summe|money }}</b></span>{% endif %}
+  </div>
+
+  {% if rechnungen %}
+  <div class="scroll"><table>
+    <thead><tr><th>Typ</th><th>Nummer</th><th>Datum</th><th>Titel / Kunde</th><th>Status</th><th class="r">Netto</th><th class="r">Materialwert</th>{% if g.user.role != 'leser' %}<th style="width:1%"></th>{% endif %}</tr></thead>
+    <tbody>{% for d in rechnungen %}<tr>
+      <td><span class="chip">{{ BELEG_TYPEN.get(d.typ, d.typ) }}</span></td>
+      <td><a href="{{ url_for('main.lex_beleg_detail', did=d.id, von=p.id) }}">{{ d.nummer or ('Beleg #' ~ d.id) }}</a></td>
+      <td>{{ d.datum|datum }}</td>
+      <td>{{ d.titel or d.kunde_name or '–' }}</td>
+      <td>{{ BELEG_STATUS.get(d.status, d.status or '–') }}</td>
+      <td class="r">{{ d.netto|money if d.netto is not none else '–' }}</td>
+      <td class="r">{{ d.materialwert|money }}{% if d.unklar_anzahl %} <span class="chip bald">{{ d.unklar_anzahl }} unklar</span>{% endif %}</td>
+      {% if g.user.role != 'leser' %}<td>
+        <form method="post" action="{{ url_for('main.projekt_beleg_zuordnen', pid=p.id) }}" style="display:inline">
+          {{ csrf() }}<input type="hidden" name="document_id" value="{{ d.id }}"><input type="hidden" name="aktion" value="loesen">
+          <button class="btn sek" style="padding:.2rem .55rem; font-size:.8rem" title="Vom Projekt lösen">Lösen</button>
+        </form></td>{% endif %}
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}
+  <p class="leer" style="padding:.8rem; margin:0">Diesem Projekt ist noch keine Rechnung zugeordnet.</p>
+  {% endif %}
+
+  {% if g.user.role != 'leser' and belege_frei_rechnungen %}
+  <form method="post" action="{{ url_for('main.projekt_beleg_zuordnen', pid=p.id) }}" class="leiste" style="margin-top:.6rem; gap:.5rem">
+    {{ csrf() }}
+    <label class="f" style="min-width:18rem; margin:0">
+      <select name="document_id" style="font-size:.85rem; padding:.3rem .5rem">
+        <option value="" disabled selected>-- Lexoffice-Rechnung auswählen --</option>
+        {% for d in belege_frei_rechnungen %}
+        <option value="{{ d.id }}">{{ BELEG_TYPEN.get(d.typ, d.typ) }} {{ d.nummer or '' }} · {{ d.datum|datum }} · {{ d.kunde_name or '–' }} ({{ d.netto|money if d.netto is not none else '–' }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn sek" style="font-size:.85rem; padding:.3rem .7rem">+ Rechnung zuordnen</button>
+  </form>
+  {% endif %}
+</div>
 {% endif %}
 {% else %}
 <p class="leer">Wähle oben ein Projekt aus. Hier erscheinen dann seine Bestellungen, das Material und die Übersicht.</p>

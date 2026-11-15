@@ -44,7 +44,11 @@ h = P("/positionen/1/aufteilen", {"menge_neu": "2", "project_id": "2", "kommissi
 assert "Position aufgeteilt" in h
 assert P("/positionen/1/aufteilen", {"menge_neu": "9", "project_id": "2"}, page="/positionen/1").count("kleiner als die Gesamtmenge") >= 1
 
-# Projektansicht: Bestellung erscheint unter Bestellt, mit Zurück-Link
+# Projektansicht: Neuer Reiter Vorgang mit Blöcken Angebot, Bestellung, Rechnung
+h = G("/projekte?p=1&tab=vorgang")
+assert "Vorgang" in h and "Angebot" in h and "Bestellung" in h and "Rechnung" in h
+assert "Bestellt" in h and "22656347" in h and "von=1" in h
+# Kompatibilität mit altem Aufruf tab=bestellungen
 h = G("/projekte?p=1&tab=bestellungen")
 assert "Bestellt" in h and "22656347" in h and "von=1" in h
 h = G("/bestellungen/1?von=1")
