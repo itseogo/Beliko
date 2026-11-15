@@ -44,7 +44,7 @@
 <tbody>{% for i in o.items %}
 <tr class="{{ i.faellig }} {{ 'storno' if i.storniert }}">
   <td>{{ i.bezeichnung }}{% if i.artikelnr %}<small class="sub">{{ i.artikelnr }}</small>{% endif %}{% if i.kommission %}<small class="sub">Kommission: {{ i.kommission }}</small>{% endif %}{% if i.hinweis %}<small class="sub hinweis">{{ i.hinweis }}</small>{% endif %}</td>
-  <td>{{ i.project.nummer if i.project else '–' }}</td>
+  <td>{% if i.project %}<a href="{{ url_for('main.projekte', p=i.project.id, status='alle') }}">{{ i.project.nummer }}{% if i.project.name %} · {{ i.project.name }}{% endif %}</a>{% else %}–{% endif %}</td>
   <td class="r">{{ i.menge|qty }} {{ i.einheit or '' }}</td><td class="r">{{ i.geliefert|qty }}</td><td class="r">{{ i.rest|qty if not i.storniert else '' }}</td>
   <td>{{ i.status }}</td>
   <td>

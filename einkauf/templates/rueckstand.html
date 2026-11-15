@@ -28,7 +28,7 @@
 <tbody>
 {% for i in items %}
 <tr class="{{ i.faellig }}">
-  {% if modus != 'projekt' %}<td>{{ i.project.nummer if i.project else '–' }}</td>{% endif %}
+  {% if modus != 'projekt' %}<td>{% if i.project %}<a href="{{ url_for('main.projekte', p=i.project.id, status='alle') }}">{{ i.project.nummer }}{% if i.project.name %} · {{ i.project.name }}{% endif %}</a>{% else %}–{% endif %}</td>{% endif %}
   {% if modus != 'lieferant' %}<td>{{ i.order.supplier.name }}</td>{% endif %}
   <td><a href="{{ url_for('main.bestellung_detail', oid=i.order_id) }}">{{ i.bezeichnung }}</a>{% if i.artikelnr %}<small class="sub">{{ i.artikelnr }}</small>{% endif %}{% if i.kommission %}<small class="sub">Kommission: {{ i.kommission }}</small>{% endif %}{% if i.hinweis %}<small class="sub hinweis">{{ i.hinweis }}</small>{% endif %}</td>
   <td class="r">{{ i.menge|qty }} {{ i.einheit or '' }}</td>

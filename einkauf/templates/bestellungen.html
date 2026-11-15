@@ -11,11 +11,21 @@
 <div class="scroll"><table>
 <thead><tr><th>Datum</th><th>Bestellnr.</th><th>Lieferant</th><th>Projekt</th><th class="r">Positionen</th><th class="r">Summe netto</th><th>Status</th><th></th></tr></thead>
 <tbody>{% for o in bestellungen %}
-{% set pr = [] %}{% for i in o.items %}{% if i.project and i.project.nummer not in pr %}{% set _ = pr.append(i.project.nummer) %}{% endif %}{% endfor %}
+{% set projs = [] %}{% set pids = [] %}
+{% for i in o.items %}
+  {% if i.project and i.project.id not in pids %}
+    {% set _ = pids.append(i.project.id) %}
+    {% set _ = projs.append(i.project) %}
+  {% endif %}
+{% endfor %}
 <tr><td>{{ o.bestelldatum|datum }}</td>
 <td><a href="{{ url_for('main.bestellung_detail', oid=o.id) }}">{{ o.bestellnr or ('Nr. ' ~ o.id) }}</a></td>
 <td>{{ o.supplier.name }}</td>
-<td>{{ pr|join(', ') or '–' }}</td>
+<td>
+  {% for p in projs %}
+    <a href="{{ url_for('main.projekte', p=p.id, status='alle') }}">{{ p.nummer }}{% if p.name %} · {{ p.name }}{% endif %}</a>{% if not loop.last %}, {% endif %}
+  {% else %}–{% endfor %}
+</td>
 <td class="r">{{ o.items|length }}</td><td class="r">{{ o.summe|money }}</td>
 <td><span class="chip s-{{ o.status }}">{{ BEST_KURZ[o.status] }}</span></td>
 <td class="r" style="white-space:nowrap">
