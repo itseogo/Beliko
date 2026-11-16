@@ -191,4 +191,56 @@ res = c.post("/artikel/import", data={
 }, follow_redirects=True).get_data(as_text=True)
 assert "Datanorm-Löschpflege fertig" in res
 
-print("DATANORM + PREISPFLEGE + KUPFER + ZIP + LOESCH TESTS OK")
+# Schritt 7: Löffelhardt Datanorm 4 (PE=100 im A-Satz, P-Satz ohne eigenes PE-Feld)
+DN4_LOEFFEL_STAMM = (
+    "V 161126Emil Loeffelhardt GmbH & Co. KG         eBusiness                               0000110738                         04EUR\r\n"
+    "A;N;0010001;00;Cimco 181902 Klettbandgurt 25x300mm; rot/schwarz m.Kunststoffoese;1;2;ST;16122;E226;2; ;\r\n"
+    "B;N;0010001;Cimco181902Klet; ; ;;;;4021103819029; ;211010;90;10; ; ;\r\n"
+    "A;N;0106868;00;NYM-J 5x 1,5 500 Installationsleitung; GNGE/BL/BR/SW/GR;1;2;M;10150;B835;1; ;\r\n"
+    "B;N;0106868;NYM-J5x1,5500In; ; ;2;150;7200;4046725073680; ;111030;90;500; ; ;\r\n"
+).encode("cp1252")
+DN4_LOEFFEL_PREIS = (
+    "V 161126Emil Loeffelhardt GmbH & Co. KG         eBusiness                               0000110738                         04EUR\r\n"
+    "P;A;0010001;2;14187;;;;;;;0106868;2;11392;;;;;;;\r\n"
+).encode("cp1252")
+
+loeffel_zip = io.BytesIO()
+with zipfile.ZipFile(loeffel_zip, "w") as zf:
+    zf.writestr("datanorm.001", DN4_LOEFFEL_STAMM)
+    zf.writestr("datpreis.001", DN4_LOEFFEL_PREIS)
+
+r_lf = datanorm.lesen(loeffel_zip.getvalue())
+a_klett = next(a for a in r_lf["artikel"] if a["artikelnr"] == "0010001")
+assert a_klett["preiseinheit"] == 100
+assert a_klett["listenpreis"] == Decimal("1.4187")  # 141,87 € / 100 Stk = 1,4187 € / Stk!
+
+a_nym = next(a for a in r_lf["artikel"] if a["artikelnr"] == "0106868")
+assert a_nym["preiseinheit"] == 100
+assert a_nym["listenpreis"] == Decimal("1.1392")    # 113,92 € / 100 m = 1,1392 € / m!
+assert a_nym["kupfergewicht"] == Decimal("7.200")
+
+# Auch bei separatem Preispflege-Upload in der Web-App muss PE=100 aus der DB erhalten bleiben:
+t = tok(get("/artikel/import").get_data(as_text=True))
+c.post("/artikel/import", data={
+    "_csrf": t,
+    "datei": (io.BytesIO(DN4_LOEFFEL_STAMM), "datanorm.001"),
+    "supplier_id": "1",
+    "modus": "voll",
+}, follow_redirects=True)
+
+t = tok(get("/artikel/import").get_data(as_text=True))
+c.post("/artikel/import", data={
+    "_csrf": t,
+    "datei": (io.BytesIO(DN4_LOEFFEL_PREIS), "datpreis.001"),
+    "supplier_id": "1",
+    "modus": "nur_preise",
+}, follow_redirects=True)
+
+with app.app_context():
+    with app.extensions["SessionLocal"]() as s:
+        art_nym = s.query(Article).filter(Article.artikelnr == "0106868").first()
+        assert art_nym is not None
+        assert art_nym.preiseinheit == 100
+        assert art_nym.listenpreis == Decimal("1.1392")
+
+print("DATANORM + PREISPFLEGE + KUPFER + ZIP + LOESCH + LOEFFELHARDT TESTS OK")

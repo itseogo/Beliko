@@ -2297,10 +2297,15 @@ def artikel_import():
             for artnr, pd in preis_quellen.items():
                 a = bestehende.get(artnr)
                 if a:
-                    if pd.get("listenpreis") is not None:
-                        a.listenpreis = pd["listenpreis"]
                     if pd.get("preiseinheit"):
                         a.preiseinheit = pd["preiseinheit"]
+                        if pd.get("listenpreis") is not None:
+                            a.listenpreis = pd["listenpreis"]
+                    elif pd.get("roher_preis_eur") is not None:
+                        eff_pe = a.preiseinheit or 1
+                        a.listenpreis = (pd["roher_preis_eur"] / Decimal(eff_pe)).quantize(Decimal("0.0001"))
+                    elif pd.get("listenpreis") is not None:
+                        a.listenpreis = pd["listenpreis"]
                     if sid:
                         a.supplier_id = sid
                     a.updated_at = datetime.now()

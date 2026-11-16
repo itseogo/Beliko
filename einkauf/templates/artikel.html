@@ -22,11 +22,11 @@
     <td>{{ a.einheit or '–' }}</td>
     <td class="r">
       {{ a.listenpreis|preis if a.listenpreis is not none else '–' }}
-      {% if a.preiseinheit and a.preiseinheit > 1 %}<small class="sub">pro {{ a.preiseinheit }} {{ a.einheit or '' }}</small>{% endif %}
+      {% if a.preiseinheit and a.preiseinheit > 1 %}<small class="sub">je {{ a.einheit or 'Einh.' }} (PE {{ a.preiseinheit }})</small>{% endif %}
     </td>
     <td>
       {% if a.kupfergewicht or a.kupferbasis %}
-        <div>Cu: <b>{{ a.kupfergewicht|qty }} kg</b>{% if a.kupfermerker == 3 %} / Stk{% elif a.kupfermerker == 1 %} / 100m{% elif a.kupfermerker == 2 %} / 1000m{% endif %}</div>
+        <div>Cu: <b>{{ a.kupfergewicht|qty }} kg</b>{% if a.einheit == 'm' %} / 100m{% elif a.kupfermerker == 3 %} / Stk{% elif a.kupfermerker in (1, 2) %} / 100 {{ a.einheit or 'Stk' }}{% endif %}</div>
         {% if a.kupferbasis %}<small class="sub">Basis {{ a.kupferbasis|money }}</small>{% endif %}
       {% endif %}
       {% if a.ean %}<small class="sub">EAN {{ a.ean }}</small>{% endif %}

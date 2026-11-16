@@ -114,15 +114,23 @@ def lesen(daten: bytes, modus: str = "auto"):
                     res = lesen(z.read(stamm_datei), modus=modus)
                     if preis_datei:
                         res_p = lesen(z.read(preis_datei), modus="nur_preise")
-                        res["preise"].update(res_p.get("preise", {}))
                         p_map = res_p.get("preise", {})
                         for a in res["artikel"]:
                             pd = p_map.get(a["artikelnr"])
                             if pd:
-                                if pd.get("listenpreis") is not None:
-                                    a["listenpreis"] = pd["listenpreis"]
                                 if pd.get("preiseinheit"):
                                     a["preiseinheit"] = pd["preiseinheit"]
+                                    if pd.get("listenpreis") is not None:
+                                        a["listenpreis"] = pd["listenpreis"]
+                                elif pd.get("roher_preis_eur") is not None:
+                                    eff_pe = a.get("preiseinheit") or 1
+                                    norm_p = (pd["roher_preis_eur"] / Decimal(eff_pe)).quantize(Decimal("0.0001"))
+                                    a["listenpreis"] = norm_p
+                                    pd["listenpreis"] = norm_p
+                                    pd["preiseinheit"] = eff_pe
+                                elif pd.get("listenpreis") is not None:
+                                    a["listenpreis"] = pd["listenpreis"]
+                        res["preise"].update(p_map)
                     return res
                 elif preis_datei:
                     return lesen(z.read(preis_datei), modus="nur_preise")
@@ -302,7 +310,8 @@ def lesen(daten: bytes, modus: str = "auto"):
 
         elif satz == "P":
             # Satzart P: Preissatz (Preispflege)
-            # In Datanorm 4: P;A;ArtNr1;Typ1;Preis1;PE1;RG1;;;;;ArtNr2;Typ2;Preis2;PE2;RG2;;;;;ArtNr3;...
+            # In Datanorm 4: P;A;ArtNr1;Typ1;Preis1;Rabattkz1;RG1;;;;;ArtNr2;Typ2;Preis2;Rabattkz2;RG2;;;;;ArtNr3;...
+            #   Wichtig: Datanorm 4 P-Satz enthält KEINE Preiseinheit (PE steht im A-Satz)!
             # In Datanorm 5: P;ArtNr;Preiskz;PE;Preis;RG;...
             if len(felder) < 3:
                 continue
@@ -315,45 +324,59 @@ def lesen(daten: bytes, modus: str = "auto"):
                         artnr = felder[off].strip()
                         ptyp = felder[off + 1].strip() if len(felder) > off + 1 else "1"
                         praw = felder[off + 2].strip() if len(felder) > off + 2 else ""
-                        peraw = felder[off + 3].strip() if len(felder) > off + 3 else "0"
                         if praw:
-                            p_bloecke.append((artnr, ptyp or "1", praw, peraw or "0"))
+                            p_bloecke.append((artnr, ptyp or "1", praw, None))
             else:
                 # Datanorm 5: 0: P, 1: ArtNr, 2: Preiskz, 3: PE, 4: Preis
                 artnr = felder[1].strip() if len(felder) > 1 else ""
                 ptyp = felder[2].strip() if len(felder) > 2 else "1"
-                peraw = felder[3].strip() if len(felder) > 3 else "1"
+                peraw = felder[3].strip() if len(felder) > 3 else ""
                 praw = felder[4].strip() if len(felder) > 4 else ""
+                pe_expl = _pe_faktor(peraw, is_dn5=True) if peraw else None
                 if artnr and praw:
-                    p_bloecke.append((artnr, ptyp or "1", praw, peraw or "1"))
+                    p_bloecke.append((artnr, ptyp or "1", praw, pe_expl))
 
-            for artnr, preistyp, p_raw, pe_raw in p_bloecke:
+            for artnr, preistyp, p_raw, pe_explizit in p_bloecke:
                 anz_p += 1
-                pe = _pe_faktor(pe_raw, is_dn5=is_dn5)
-                preis = _dec_preis(p_raw, pe=pe)
+                roher_preis = _dec_preis(p_raw, pe=1)
+                eff_pe = pe_explizit or (artikel[artnr].get("preiseinheit") if artnr in artikel else None) or 1
+                preis = _dec_preis(p_raw, pe=eff_pe)
                 if preis is not None:
                     if artnr not in preise:
                         preise[artnr] = {
                             "artikelnr": artnr[:100],
                             "listenpreis": preis if preistyp == "1" else None,
                             "ekpreis": preis if preistyp == "2" else None,
-                            "preiseinheit": pe,
+                            "roher_listenpreis_eur": roher_preis if preistyp == "1" else None,
+                            "roher_ekpreis_eur": roher_preis if preistyp == "2" else None,
+                            "roher_preis_eur": roher_preis,
+                            "preiseinheit": pe_explizit,
                             "preistyp": preistyp,
                         }
                     else:
                         if preistyp == "1":
                             preise[artnr]["listenpreis"] = preis
+                            preise[artnr]["roher_listenpreis_eur"] = roher_preis
                         elif preistyp == "2":
                             preise[artnr]["ekpreis"] = preis
+                            preise[artnr]["roher_ekpreis_eur"] = roher_preis
+                        if pe_explizit is not None:
+                            preise[artnr]["preiseinheit"] = pe_explizit
 
-                    # Falls nur EK-Preis da war, als Listenpreis vorsehen
+                    # Falls nur EK-Preis da war (z. B. Löffelhardt Preispflege), als Listenpreis vorsehen
                     if preise[artnr]["listenpreis"] is None and preise[artnr].get("ekpreis") is not None:
                         preise[artnr]["listenpreis"] = preise[artnr]["ekpreis"]
+                    preise[artnr]["roher_preis_eur"] = (
+                        preise[artnr].get("roher_listenpreis_eur")
+                        if preise[artnr].get("roher_listenpreis_eur") is not None
+                        else preise[artnr].get("roher_ekpreis_eur")
+                    )
 
                     if artnr in artikel:
                         if preistyp == "1" or artikel[artnr].get("listenpreis") is None:
                             artikel[artnr]["listenpreis"] = preis
-                            artikel[artnr]["preiseinheit"] = pe
+                            if pe_explizit is not None:
+                                artikel[artnr]["preiseinheit"] = pe_explizit
 
         elif satz == "S":
             # Satzart S: Warengruppen (Datanorm 4/5)
