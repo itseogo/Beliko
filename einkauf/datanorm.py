@@ -162,23 +162,28 @@ def lesen(daten: bytes, modus: str = "auto"):
 
     artikel = {}
     preise = {}
+    loeschungen = set()
+    warengruppen = {}
+    rabattgruppen = {}
     warnungen = []
-    anz_a, anz_p, anz_b = 0, 0, 0
+    anz_a, anz_p, anz_b, anz_l, anz_s, anz_r = 0, 0, 0, 0, 0, 0
 
     for nr, z in enumerate(zeilen, 1):
         felder = z.split(";")
-        if len(felder) < 3:
+        if len(felder) < 2:
             continue
         satz = felder[0].strip().upper()
 
         if satz == "A":
-            if len(felder) < 4:
+            if len(felder) < 3:
                 continue
             artnr = felder[2].strip()
             if not artnr:
                 continue
             v_kz = felder[1].strip().upper()
             if v_kz == "L":
+                loeschungen.add(artnr)
+                anz_l += 1
                 continue
 
             anz_a += 1
@@ -297,69 +302,99 @@ def lesen(daten: bytes, modus: str = "auto"):
 
         elif satz == "P":
             # Satzart P: Preissatz (Preispflege)
+            # In Datanorm 4: P;A;ArtNr1;Typ1;Preis1;PE1;RG1;;;;;ArtNr2;Typ2;Preis2;PE2;RG2;;;;;ArtNr3;...
+            # In Datanorm 5: P;ArtNr;Preiskz;PE;Preis;RG;...
             if len(felder) < 3:
                 continue
-            anz_p += 1
 
-            if felder[1].strip().upper() in ("N", "K", "A") and len(felder) >= 4:
-                artnr = felder[2].strip()
-                preistyp = felder[3].strip() or "1"
-                if len(felder) > 5 and felder[5].strip():
-                    pe_raw = felder[4].strip()
-                    p_raw = felder[5].strip()
-                elif len(felder) > 4 and felder[4].strip():
-                    pe_raw = "1"
-                    p_raw = felder[4].strip()
-                else:
-                    pe_raw = "1"
-                    p_raw = felder[3].strip() if len(felder) > 3 else ""
+            p_bloecke = []
+            if felder[1].strip().upper() in ("N", "K", "A", "L"):
+                # Datanorm 4: Bis zu 3 Artikelblöcke je Zeile im Abstand von 9 Feldern (2, 11, 20)
+                for off in (2, 11, 20):
+                    if off < len(felder) and felder[off].strip():
+                        artnr = felder[off].strip()
+                        ptyp = felder[off + 1].strip() if len(felder) > off + 1 else "1"
+                        praw = felder[off + 2].strip() if len(felder) > off + 2 else ""
+                        peraw = felder[off + 3].strip() if len(felder) > off + 3 else "0"
+                        if praw:
+                            p_bloecke.append((artnr, ptyp or "1", praw, peraw or "0"))
             else:
-                artnr = felder[1].strip()
-                preistyp = felder[2].strip() if len(felder) > 2 else "1"
-                pe_raw = felder[3].strip() if len(felder) > 3 else "1"
-                p_raw = felder[4].strip() if len(felder) > 4 else ""
+                # Datanorm 5: 0: P, 1: ArtNr, 2: Preiskz, 3: PE, 4: Preis
+                artnr = felder[1].strip() if len(felder) > 1 else ""
+                ptyp = felder[2].strip() if len(felder) > 2 else "1"
+                peraw = felder[3].strip() if len(felder) > 3 else "1"
+                praw = felder[4].strip() if len(felder) > 4 else ""
+                if artnr and praw:
+                    p_bloecke.append((artnr, ptyp or "1", praw, peraw or "1"))
 
-            if not artnr or not p_raw:
-                continue
+            for artnr, preistyp, p_raw, pe_raw in p_bloecke:
+                anz_p += 1
+                pe = _pe_faktor(pe_raw, is_dn5=is_dn5)
+                preis = _dec_preis(p_raw, pe=pe)
+                if preis is not None:
+                    if artnr not in preise:
+                        preise[artnr] = {
+                            "artikelnr": artnr[:100],
+                            "listenpreis": preis if preistyp == "1" else None,
+                            "ekpreis": preis if preistyp == "2" else None,
+                            "preiseinheit": pe,
+                            "preistyp": preistyp,
+                        }
+                    else:
+                        if preistyp == "1":
+                            preise[artnr]["listenpreis"] = preis
+                        elif preistyp == "2":
+                            preise[artnr]["ekpreis"] = preis
 
-            pe = _pe_faktor(pe_raw, is_dn5=is_dn5)
-            preis = _dec_preis(p_raw, pe=pe)
-            if preis is not None:
-                if artnr not in preise:
-                    preise[artnr] = {
-                        "artikelnr": artnr[:100],
-                        "listenpreis": preis if preistyp == "1" else None,
-                        "ekpreis": preis if preistyp == "2" else None,
-                        "preiseinheit": pe,
-                        "preistyp": preistyp,
-                    }
-                else:
-                    if preistyp == "1":
-                        preise[artnr]["listenpreis"] = preis
-                    elif preistyp == "2":
-                        preise[artnr]["ekpreis"] = preis
+                    # Falls nur EK-Preis da war, als Listenpreis vorsehen
+                    if preise[artnr]["listenpreis"] is None and preise[artnr].get("ekpreis") is not None:
+                        preise[artnr]["listenpreis"] = preise[artnr]["ekpreis"]
 
-                # Falls nur EK-Preis da war, als Listenpreis vorsehen
-                if preise[artnr]["listenpreis"] is None and preise[artnr].get("ekpreis") is not None:
-                    preise[artnr]["listenpreis"] = preise[artnr]["ekpreis"]
+                    if artnr in artikel:
+                        if preistyp == "1" or artikel[artnr].get("listenpreis") is None:
+                            artikel[artnr]["listenpreis"] = preis
+                            artikel[artnr]["preiseinheit"] = pe
 
-                if artnr in artikel:
-                    if preistyp == "1" or artikel[artnr].get("listenpreis") is None:
-                        artikel[artnr]["listenpreis"] = preis
-                        artikel[artnr]["preiseinheit"] = pe
+        elif satz == "S":
+            # Satzart S: Warengruppen (Datanorm 4/5)
+            # z.B. S;;1;Kabel und Leitungen;;; oder S;;10;;01;Ausgleichsleitung;
+            anz_s += 1
+            wg_code = felder[2].strip() if len(felder) > 2 else ""
+            wg_text = felder[3].strip() if len(felder) > 3 and felder[3].strip() else (felder[5].strip() if len(felder) > 5 else "")
+            if wg_code and wg_text:
+                warengruppen[wg_code] = wg_text[:100]
 
-    if not anz_a and not anz_p and not anz_b:
-        raise DatanormFehler("In der Datei wurden keine gültigen Datanorm-Sätze (A, B oder P) gefunden.")
+        elif satz == "R":
+            # Satzart R: Rabattgruppen (Datanorm 4/5)
+            # z.B. R;;1000;1;1000;;
+            anz_r += 1
+            rg_code = felder[2].strip() if len(felder) > 2 else ""
+            rg_text = felder[4].strip() if len(felder) > 4 and felder[4].strip() else rg_code
+            if rg_code:
+                rabattgruppen[rg_code] = rg_text[:50]
 
-    ist_reine_preisdatei = (anz_p > 0 and anz_a == 0)
+    if not anz_a and not anz_p and not anz_b and not anz_l and not anz_s and not anz_r:
+        raise DatanormFehler("In der Datei wurden keine gültigen Datanorm-Sätze (A, B, P, S oder R) gefunden.")
+
+    ist_reine_preisdatei = (anz_p > 0 and anz_a == 0 and anz_l == 0)
+    ist_reine_loeschdatei = (anz_l > 0 and anz_a == 0 and anz_p == 0)
+    ist_reine_warengruppendatei = (anz_s > 0 and anz_a == 0 and anz_p == 0 and anz_l == 0)
 
     return {
         "artikel": list(artikel.values()),
         "preise": preise,
+        "loeschungen": list(loeschungen),
+        "warengruppen": warengruppen,
+        "rabattgruppen": rabattgruppen,
         "is_dn5": is_dn5,
         "ist_reine_preisdatei": ist_reine_preisdatei,
+        "ist_reine_loeschdatei": ist_reine_loeschdatei,
+        "ist_reine_warengruppendatei": ist_reine_warengruppendatei,
         "anzahl_artikel": anz_a,
         "anzahl_preise": anz_p,
         "anzahl_zusatz": anz_b,
+        "anzahl_loeschungen": anz_l,
+        "anzahl_warengruppen": anz_s,
+        "anzahl_rabattgruppen": anz_r,
         "warnungen": warnungen,
     }

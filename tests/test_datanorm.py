@@ -162,4 +162,33 @@ res = c.post("/artikel/import", data={
 }, follow_redirects=True).get_data(as_text=True)
 assert "Datanorm-Import fertig" in res or "Artikel aktualisiert" in res
 
-print("DATANORM + PREISPFLEGE + KUPFER + ZIP TESTS OK")
+# Schritt 5: Datanorm 4 Mehrfach-P-Satz (z.B. Granzow: 3 Artikel je Zeile)
+DN4_PREIS_GRANZOW = (
+    "V 130223Preisstammdaten                         Ernst Granzow GmbH & Co. KG             71229 Leonberg                     04EUR\r\n"
+    "P;A;3532049;1;877;0;7047;;;;;3529441;1;855;0;7041;;;;;3490564;1;866;0;5800;;;;;\r\n"
+).encode("cp1252")
+r_gp = datanorm.lesen(DN4_PREIS_GRANZOW)
+assert len(r_gp["preise"]) == 3
+assert r_gp["preise"]["3532049"]["listenpreis"] == Decimal("8.7700")
+assert r_gp["preise"]["3529441"]["listenpreis"] == Decimal("8.5500")
+assert r_gp["preise"]["3490564"]["listenpreis"] == Decimal("8.6600")
+
+# Schritt 6: Löschpflege (A;L)
+DN_LOESCH = (
+    "V 010825Loeschpflege                           loescht alle Artikel ausser GH-Sortiment                                    04EUR\r\n"
+    "A;L;2641481;;;;;;;;;;;\r\n"
+).encode("cp1252")
+r_loesch = datanorm.lesen(DN_LOESCH)
+assert r_loesch["ist_reine_loeschdatei"] is True
+assert "2641481" in r_loesch["loeschungen"]
+
+t = tok(get("/artikel/import").get_data(as_text=True))
+res = c.post("/artikel/import", data={
+    "_csrf": t,
+    "datei": (io.BytesIO(DN_LOESCH), "datanorm.900"),
+    "supplier_id": "1",
+    "modus": "auto",
+}, follow_redirects=True).get_data(as_text=True)
+assert "Datanorm-Löschpflege fertig" in res
+
+print("DATANORM + PREISPFLEGE + KUPFER + ZIP + LOESCH TESTS OK")

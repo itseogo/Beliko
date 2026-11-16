@@ -2273,6 +2273,21 @@ def artikel_import():
             return redirect(url_for("main.artikel_import"))
 
         bestehende = {a.artikelnr: a for a in g.db.query(Article).all()}
+
+        if r.get("ist_reine_loeschdatei"):
+            loesch_kand = [bestehende[artnr] for artnr in r.get("loeschungen", []) if artnr in bestehende]
+            for a in loesch_kand:
+                g.db.delete(a)
+            if loesch_kand:
+                g.db.commit()
+            protokoll("import", "artikel", details=f"Datanorm Löschpflege: {len(loesch_kand)} Artikel entfernt")
+            flash(f"Datanorm-Löschpflege fertig: {len(loesch_kand)} Artikel aus dem Stamm gelöscht ({len(r.get('loeschungen', []))} in Datei gemeldet).", "ok")
+            return redirect(url_for("main.artikel"))
+
+        if r.get("ist_reine_warengruppendatei"):
+            flash(f"Datanorm-Warengruppen: {len(r.get('warengruppen', {}))} Warengruppen in der Datei gefunden.", "ok")
+            return redirect(url_for("main.artikel"))
+
         ist_nur_preise = (modus == "nur_preise") or (modus == "auto" and r["ist_reine_preisdatei"])
 
         if ist_nur_preise:
@@ -2330,9 +2345,18 @@ def artikel_import():
                 if sid:
                     a.supplier_id = sid
                 a.updated_at = datetime.now()
-            protokoll("import", "artikel", details=f"Datanorm: {neu} neu, {akt} aktualisiert")
+            geloescht = 0
+            if r.get("loeschungen"):
+                for artnr in r["loeschungen"]:
+                    a = bestehende.get(artnr)
+                    if a:
+                        g.db.delete(a)
+                        bestehende.pop(artnr, None)
+                        geloescht += 1
+
+            protokoll("import", "artikel", details=f"Datanorm: {neu} neu, {akt} aktualisiert" + (f", {geloescht} gelöscht" if geloescht else ""))
             g.db.commit()
-            flash(f"Datanorm-Import fertig: {neu} neue Artikel, {akt} aktualisiert.", "ok")
+            flash(f"Datanorm-Import fertig: {neu} neue Artikel, {akt} aktualisiert" + (f", {geloescht} gelöschte Artikel bereinigt" if geloescht else "") + ".", "ok")
             return redirect(url_for("main.artikel"))
 
     lieferanten = g.db.query(Supplier).filter(Supplier.active.is_(True)).order_by(Supplier.name).all()
