@@ -12,6 +12,21 @@
       {% for l in lieferanten %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}
     </select></label>
   </div>
+  <div style="margin:1rem 0;padding:.85rem 1rem;background:var(--head-bg);border:1px solid var(--line);border-radius:6px">
+    <span style="font-weight:700;display:block;margin-bottom:.5rem">Import-Modus</span>
+    <label class="check" style="display:flex;align-items:flex-start;gap:.5rem;margin-bottom:.45rem;cursor:pointer">
+      <input type="radio" name="modus" value="auto" checked style="margin-top:.2rem">
+      <span><b>Automatisch erkennen (empfohlen)</b>: Legt neue Artikel an und aktualisiert bestehende. Erkennt reine Preisdateien (Satzart P) selbstständig.</span>
+    </label>
+    <label class="check" style="display:flex;align-items:flex-start;gap:.5rem;margin-bottom:.45rem;cursor:pointer">
+      <input type="radio" name="modus" value="nur_preise" style="margin-top:.2rem">
+      <span><b>Nur Preise aktualisieren (Preispflege / DATPREIS)</b>: Aktualisiert nur die Listenpreise bereits vorhandener Artikel. Legt keine neuen Artikel an und verändert keine Artikeltexte.</span>
+    </label>
+    <label class="check" style="display:flex;align-items:flex-start;gap:.5rem;cursor:pointer">
+      <input type="radio" name="modus" value="voll" style="margin-top:.2rem">
+      <span><b>Vollständiger Artikelstamm</b>: Übernimmt Artikeltexte, Einheiten, Rabattgruppen, Kupferbasis/-gewicht und Preise; legt neue Artikel an.</span>
+    </label>
+  </div>
   <div class="actions"><button class="btn">Importieren</button><a class="btn sek" href="{{ url_for('main.artikel') }}">Abbrechen</a></div>
 </form>
 {% endblock %}

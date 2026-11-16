@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from . import config
 from .models import Base, Meta, NumberRange, Order
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 
 def _spalten_ergaenzen(engine, tabelle, spalten):
@@ -91,6 +91,16 @@ def migrate(engine):
             _spalten_ergaenzen(engine, tab, {"version": "INTEGER"})
             with engine.begin() as conn:
                 conn.execute(text(f"UPDATE {tab} SET version = 1 WHERE version IS NULL"))
+    if aktuell < 13:
+        _spalten_ergaenzen(engine, "articles", {
+            "preiseinheit": "INTEGER",
+            "kupferbasis": "DECIMAL(10,2)",
+            "kupfergewicht": "DECIMAL(10,3)",
+            "kupfermerker": "INTEGER",
+            "ean": "VARCHAR(30)",
+            "matchcode": "VARCHAR(50)",
+            "hersteller_artnr": "VARCHAR(100)",
+        })
     with Session(engine) as s:
         row = s.get(Meta, "schema_version")
         if row is None:

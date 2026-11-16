@@ -2258,41 +2258,83 @@ def artikel_import():
     if request.method == "POST":
         f = request.files.get("datei")
         sid = request.form.get("supplier_id", type=int)
+        modus = request.form.get("modus", "auto")  # 'auto', 'voll', 'nur_preise'
         if not f or not f.filename:
             flash("Bitte eine Datanorm-Datei auswählen.", "fehler")
             return redirect(url_for("main.artikel_import"))
-        daten = f.read(10 * 1024 * 1024 + 1)
-        if len(daten) > 10 * 1024 * 1024:
-            flash("Die Datei ist größer als 10 MB.", "fehler")
+        daten = f.read(25 * 1024 * 1024 + 1)
+        if len(daten) > 25 * 1024 * 1024:
+            flash("Die Datei ist größer als 25 MB.", "fehler")
             return redirect(url_for("main.artikel_import"))
         try:
             r = datanorm.lesen(daten)
         except datanorm.DatanormFehler as e:
             flash(f"Datanorm-Datei nicht lesbar: {e}", "fehler")
             return redirect(url_for("main.artikel_import"))
+
         bestehende = {a.artikelnr: a for a in g.db.query(Article).all()}
-        neu, akt = 0, 0
-        for d in r["artikel"]:
-            a = bestehende.get(d["artikelnr"])
-            if a is None:
-                a = Article(artikelnr=d["artikelnr"], bezeichnung=d["bezeichnung"])
-                g.db.add(a)
-                bestehende[d["artikelnr"]] = a
-                neu += 1
-            else:
-                akt += 1
-            a.bezeichnung = d["bezeichnung"]
-            a.kurztext2 = d["kurztext2"]
-            a.einheit = d["einheit"]
-            a.listenpreis = d["listenpreis"]
-            a.rabattgruppe = d["rabattgruppe"]
-            if sid:
-                a.supplier_id = sid
-            a.updated_at = datetime.now()
-        protokoll("import", "artikel", details=f"Datanorm: {neu} neu, {akt} aktualisiert")
-        g.db.commit()
-        flash(f"Datanorm-Import fertig: {neu} neue Artikel, {akt} aktualisiert.", "ok")
-        return redirect(url_for("main.artikel"))
+        ist_nur_preise = (modus == "nur_preise") or (modus == "auto" and r["ist_reine_preisdatei"])
+
+        if ist_nur_preise:
+            # Reine Preispflege: Nur bestehende Artikel aktualisieren
+            akt, uebersprungen = 0, 0
+            preis_quellen = r["preise"] if r["preise"] else {d["artikelnr"]: d for d in r["artikel"] if d.get("listenpreis") is not None}
+            for artnr, pd in preis_quellen.items():
+                a = bestehende.get(artnr)
+                if a:
+                    if pd.get("listenpreis") is not None:
+                        a.listenpreis = pd["listenpreis"]
+                    if pd.get("preiseinheit"):
+                        a.preiseinheit = pd["preiseinheit"]
+                    if sid:
+                        a.supplier_id = sid
+                    a.updated_at = datetime.now()
+                    akt += 1
+                else:
+                    uebersprungen += 1
+            protokoll("import", "artikel", details=f"Datanorm Preispflege: {akt} Preise aktualisiert, {uebersprungen} übersprungen")
+            g.db.commit()
+            flash(f"Datanorm-Preispflege fertig: {akt} Preise aktualisiert"
+                  + (f" ({uebersprungen} Artikel nicht im Stamm übersprungen)" if uebersprungen else "") + ".", "ok")
+            return redirect(url_for("main.artikel"))
+        else:
+            # Vollständiger Artikelstamm: Neu anlegen & aktualisieren
+            neu, akt = 0, 0
+            for d in r["artikel"]:
+                a = bestehende.get(d["artikelnr"])
+                if a is None:
+                    a = Article(artikelnr=d["artikelnr"], bezeichnung=d["bezeichnung"])
+                    g.db.add(a)
+                    bestehende[d["artikelnr"]] = a
+                    neu += 1
+                else:
+                    akt += 1
+                a.bezeichnung = d["bezeichnung"]
+                a.kurztext2 = d.get("kurztext2")
+                a.einheit = d.get("einheit")
+                a.listenpreis = d.get("listenpreis")
+                a.preiseinheit = d.get("preiseinheit", 1)
+                a.rabattgruppe = d.get("rabattgruppe")
+                if d.get("kupferbasis") is not None:
+                    a.kupferbasis = d["kupferbasis"]
+                if d.get("kupfergewicht") is not None:
+                    a.kupfergewicht = d["kupfergewicht"]
+                if d.get("kupfermerker") is not None:
+                    a.kupfermerker = d["kupfermerker"]
+                if d.get("ean"):
+                    a.ean = d["ean"]
+                if d.get("matchcode"):
+                    a.matchcode = d["matchcode"]
+                if d.get("hersteller_artnr"):
+                    a.hersteller_artnr = d["hersteller_artnr"]
+                if sid:
+                    a.supplier_id = sid
+                a.updated_at = datetime.now()
+            protokoll("import", "artikel", details=f"Datanorm: {neu} neu, {akt} aktualisiert")
+            g.db.commit()
+            flash(f"Datanorm-Import fertig: {neu} neue Artikel, {akt} aktualisiert.", "ok")
+            return redirect(url_for("main.artikel"))
+
     lieferanten = g.db.query(Supplier).filter(Supplier.active.is_(True)).order_by(Supplier.name).all()
     return render_template("artikel_import.html", lieferanten=lieferanten)
 

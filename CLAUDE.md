@@ -4,7 +4,7 @@ Diese Datei gehört zum Projekt und wird bei **jeder Änderung** mit aktualisier
 damit in einem neuen Chat nahtlos weitergearbeitet werden kann). In einem neuen Chat: `beliko.zip`
 hochladen (enthält diese Datei) und sagen „lies die CLAUDE.md und mach weiter“.
 
-**Stand: Version 1.3.1 · Datenbank-Schemaversion 12**
+**Stand: Version 1.3.1 · Datenbank-Schemaversion 13**
 
 **Name:** Der Auftraggeber nennt das Tool **BeLiKo** (BestellLieferKontrolle). Sichtbar überall als BeLiKo; intern bleiben Paket `einkauf`, Ordner `einkauf-data` und der Dienstname `einkauf` (damit bestehende Installationen weiterlaufen). Auslieferung: `beliko.zip`.
 
@@ -282,6 +282,12 @@ Echte Dateien des Lieferanten nicht ins Paket legen; `tests/make_ugl.py` baut ei
 
 ## 10. Versionsverlauf
 - **1.3.1**
+  - **Datanorm 4/5, Preiseinheiten, Kupferzuschlag & Preispflege (Schema 13):**
+    - **Datanorm 4 & 5 Erkennung:** Datanorm 4 (Rexel mit separatem B-Satz) und Datanorm 5 (Fega mit erweitertem 29-Feld A-Satz) werden sauber unterschieden; Felder (Kurztext, Einheit, Preise) verschieben sich nicht mehr.
+    - **Preiseinheiten (PE = 1, 10, 100, 1000):** Vollständige Berücksichtigung von Preiseinheiten bei Kabeln (PE 100 = 100 m) und Kleinmaterial (PE 100/1000 = 100/1000 Stk) – Cent-Preise werden immer auf den echten Einzelpreis pro Einheit (1 Stück bzw. 1 Meter) heruntergerechnet, wodurch Multiplikationsfehler (Faktor 100) vermieden werden.
+    - **Kupferfelder im Artikelstamm:** Speichert Kupferbasis (z. B. 150 €/100kg), Kupfergewicht/Cu-Zahl (z. B. 16,8 kg Cu pro 100m) und Kupfermerker (1=100m, 2=1000m, 3=1 Stk) sowie EAN, Matchcode und Hersteller-Teilenummer.
+    - **Reine Preis-Datanorm (Preispflege):** Neue Import-Option unter `/artikel/import` ermöglicht das Einspielen von reinen Preispflege-Dateien (`DATPREIS`, Satzart P). Aktualisiert nur die Listenpreise bereits vorhandener Artikel, ohne Artikeltexte zu verändern oder Fremdartikel anzulegen.
+    - **Artikelübersicht (`/artikel`):** Zeigt Kupferdaten (`Cu: 16,8 kg / 100m (Basis 150 €)`), EAN, Hersteller-Teilenummer und Preiseinheiten transparent an.
   - **Fega Auftrags- & Lieferscheinnummern-Logik (Teillieferungen 01, 02 usw.):** Fega hängt an ihre 8-stellige Auftragsnummer (z. B. `47748835`) je Teillieferung ein zweistelliges Kürzel an (`01` für 1. Lieferung, `02` für 2. Lieferung usw. als 10-stellige Lieferscheinnummer `4774883501`, `4774883502`). BeLiKo erkennt diese Systematik nun vollautomatisch:
     - **Intelligente Zuordnung & Erkennung:** In der Lieferantendatei-Übersicht (`/dateien/<id>`) und auf der Bestelldetailseite (`/bestellungen/<id>`) werden Lieferscheine sofort als passend erkannt (`⭐ Passend (Lieferung 01)`), wenn die Belegnummer zur AB-Nummer der Bestellung passt – egal ob die Bestellung mit der Basis-Auftragsnummer (`47748835`) oder mit Belegsufix hinterlegt ist.
     - **UGL-Prüfungsansicht:** Zeigt bei erkanntem Fega-Lieferschein klar „Fega Teillieferung 01 zu Auftrag 47748835“ an und setzt „Als Lieferschein buchen (Wareneingang)“ als primären Aktionsbutton. Beim Buchen wird die Basis-Auftragsnummer automatisch als `ab_nr` in der Bestellung hinterlegt, sodass nachfolgende Teillieferungen (`4774883502` etc.) sofort gematcht werden.
