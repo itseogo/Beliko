@@ -2262,12 +2262,12 @@ def artikel_import():
         if not f or not f.filename:
             flash("Bitte eine Datanorm-Datei auswählen.", "fehler")
             return redirect(url_for("main.artikel_import"))
-        daten = f.read(25 * 1024 * 1024 + 1)
-        if len(daten) > 25 * 1024 * 1024:
-            flash("Die Datei ist größer als 25 MB.", "fehler")
+        daten = f.read(150 * 1024 * 1024 + 1)
+        if len(daten) > 150 * 1024 * 1024:
+            flash("Die Datei ist größer als 150 MB.", "fehler")
             return redirect(url_for("main.artikel_import"))
         try:
-            r = datanorm.lesen(daten)
+            r = datanorm.lesen(daten, modus=modus)
         except datanorm.DatanormFehler as e:
             flash(f"Datanorm-Datei nicht lesbar: {e}", "fehler")
             return redirect(url_for("main.artikel_import"))

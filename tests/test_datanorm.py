@@ -139,4 +139,27 @@ with app.app_context():
         assert art is not None
         assert art.listenpreis == Decimal("31.5000")
 
-print("DATANORM + PREISPFLEGE + KUPFER TESTS OK")
+# Schritt 4: Direkter ZIP-Import (Archiv mit Stamm + Preis)
+import zipfile
+zip_buffer = io.BytesIO()
+with zipfile.ZipFile(zip_buffer, "w") as zf:
+    zf.writestr("datanorm.001", DN5_FEGA)
+    zf.writestr("datpreis.001", DN_PREIS_FEGA)
+zip_daten = zip_buffer.getvalue()
+
+r_zip = datanorm.lesen(zip_daten)
+assert len(r_zip["artikel"]) == 2
+# Der Artikel 120462 sollte direkt mit dem Preis aus datpreis.001 gemerged worden sein!
+a_zip = next(a for a in r_zip["artikel"] if a["artikelnr"] == "120462")
+assert a_zip["listenpreis"] == Decimal("31.5000")
+
+t = tok(get("/artikel/import").get_data(as_text=True))
+res = c.post("/artikel/import", data={
+    "_csrf": t,
+    "datei": (io.BytesIO(zip_daten), "datanorm_fega.zip"),
+    "supplier_id": "1",
+    "modus": "auto",
+}, follow_redirects=True).get_data(as_text=True)
+assert "Datanorm-Import fertig" in res or "Artikel aktualisiert" in res
+
+print("DATANORM + PREISPFLEGE + KUPFER + ZIP TESTS OK")

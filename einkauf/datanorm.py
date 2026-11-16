@@ -85,7 +85,52 @@ def _dec_zahl(wert: str | None, teiler: Decimal = Decimal(1)) -> Decimal | None:
         return None
 
 
-def lesen(daten: bytes):
+def lesen(daten: bytes, modus: str = "auto"):
+    if not daten:
+        raise DatanormFehler("Die Datei ist leer.")
+
+    # ZIP-Archiv automatisch entpacken
+    if daten[:4] == b"PK\x03\x04":
+        import io
+        import re
+        import zipfile
+        try:
+            with zipfile.ZipFile(io.BytesIO(daten)) as z:
+                namen = z.namelist()
+                if not namen:
+                    raise DatanormFehler("Das ZIP-Archiv enthält keine Dateien.")
+
+                if modus == "nur_preise":
+                    preis_datei = next((n for n in namen if "preis" in n.lower() and not n.endswith("/")), None)
+                    if preis_datei:
+                        return lesen(z.read(preis_datei), modus=modus)
+                    stamm_datei = next((n for n in namen if re.search(r"\.(001|701|dat|txt)$", n.lower()) and not n.endswith("/")), namen[0])
+                    return lesen(z.read(stamm_datei), modus=modus)
+
+                stamm_datei = next((n for n in namen if re.search(r"(datanorm|\.(001|701))", n.lower()) and "preis" not in n.lower() and not n.endswith("/")), None)
+                preis_datei = next((n for n in namen if "preis" in n.lower() and not n.endswith("/")), None)
+
+                if stamm_datei:
+                    res = lesen(z.read(stamm_datei), modus=modus)
+                    if preis_datei:
+                        res_p = lesen(z.read(preis_datei), modus="nur_preise")
+                        res["preise"].update(res_p.get("preise", {}))
+                        p_map = res_p.get("preise", {})
+                        for a in res["artikel"]:
+                            pd = p_map.get(a["artikelnr"])
+                            if pd:
+                                if pd.get("listenpreis") is not None:
+                                    a["listenpreis"] = pd["listenpreis"]
+                                if pd.get("preiseinheit"):
+                                    a["preiseinheit"] = pd["preiseinheit"]
+                    return res
+                elif preis_datei:
+                    return lesen(z.read(preis_datei), modus="nur_preise")
+                else:
+                    return lesen(z.read(namen[0]), modus=modus)
+        except zipfile.BadZipFile:
+            raise DatanormFehler("Das ZIP-Archiv ist beschädigt.")
+
     if not daten or b"\x00" in daten[:200]:
         raise DatanormFehler("Das ist keine Datanorm-Textdatei.")
 

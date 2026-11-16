@@ -19,7 +19,7 @@ def create_app():
 
     app.jinja_env.filters.update(qty=formate.qty, money=formate.money, moneyinp=formate.preis_eingabe,
                                  preis=formate.preis, datum=formate.datum)
-    app.config.update(MAX_CONTENT_LENGTH=8 * 1024 * 1024)
+    app.config.update(MAX_CONTENT_LENGTH=150 * 1024 * 1024)
 
     @app.context_processor
     def _ctx():
