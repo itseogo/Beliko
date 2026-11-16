@@ -4,7 +4,7 @@ Diese Datei gehört zum Projekt und wird bei **jeder Änderung** mit aktualisier
 damit in einem neuen Chat nahtlos weitergearbeitet werden kann). In einem neuen Chat: `beliko.zip`
 hochladen (enthält diese Datei) und sagen „lies die CLAUDE.md und mach weiter“.
 
-**Stand: Version 1.3.1 · Datenbank-Schemaversion 13**
+**Stand: Version 1.3.1 · Datenbank-Schemaversion 14**
 
 **Name:** Der Auftraggeber nennt das Tool **BeLiKo** (BestellLieferKontrolle). Sichtbar überall als BeLiKo; intern bleiben Paket `einkauf`, Ordner `einkauf-data` und der Dienstname `einkauf` (damit bestehende Installationen weiterlaufen). Auslieferung: `beliko.zip`.
 
@@ -282,6 +282,10 @@ Echte Dateien des Lieferanten nicht ins Paket legen; `tests/make_ugl.py` baut ei
 
 ## 10. Versionsverlauf
 - **1.3.1**
+  - **Datanorm Materialübersicht & 3-Spalten Lieferanten-Vergleich über EAN (Schema 14):**
+    - **Separate Artikelstämme je Lieferant (Schema 14):** Das globale `UNIQUE`-Constraint auf `articles.artikelnr` wurde aufgehoben und durch Indizes auf `artikelnr`, `ean` und `supplier_id` ersetzt. Dadurch können beliebig viele Großhändler (z. B. Fega, Rexel, Löffelhardt, Granzow) parallel im Artikelstamm gehalten werden, ohne sich gegenseitig zu überschreiben.
+    - **Reiter „Materialübersicht“ (`/artikel?ansicht=liste`):** Zeigt das gesamte eingelesene Datanorm-Material mit Schnellfilter-Pills je Lieferant (inkl. Artikelanzahl), Filter „Nur mit Kupfer“, Suche über Artikelnr./Bezeichnung/EAN/Hersteller-Nr. sowie einem direkten Button **„⚖️ Vergleichen“** in jeder Zeile (zeigt direkt an, wie viele Händler dieselbe EAN führen, z. B. `⚖️ Vergleichen (3)`).
+    - **Reiter „Lieferanten-Vergleich (bis zu 3 Spalten)“ (`/artikel?ansicht=vergleich`):** Ermöglicht das Aktivieren von 1, 2 oder **3 Lieferanten-Spalten nebeneinander**. Verknüpft identische Artikel unterschiedlicher Großhändler automatisch über die **EAN-Nummer** (bzw. Hersteller-Artikelnummer als Fallback). Hebt den **günstigsten Anbieter grün (`Günstigster`)** hervor und zeigt bei den anderen Spalten direkt den Mehrpreis in € und % sowie die jeweilige Lieferanten-Artikelnummer, Preiseinheit, Rabattgruppe und Kupferdaten an. Auch eine Suche nach der Artikelnummer nur eines Händlers findet über dessen EAN automatisch die Vergleichspreise der anderen beiden Händler.
   - **Datanorm 4/5, Preiseinheiten, Kupferzuschlag & Preispflege (Schema 13):**
     - **Datanorm 4 & 5 Erkennung:** Datanorm 4 (Rexel, Granzow, Löffelhardt mit separatem B-Satz) und Datanorm 5 (Fega mit erweitertem 29-Feld A-Satz) werden sauber unterschieden; Felder (Kurztext, Einheit, Preise) verschieben sich nicht mehr.
     - **Granzow & Löffelhardt Mehrfach-Preissätze (Datanorm 4 Satzart P):** Datanorm 4 erlaubt bis zu 3 Artikelblöcke je P-Zeile im Abstand von 9 Feldern (z. B. Granzow `datpreis.001` und Löffelhardt `Datanorm.zip`). Da der Datanorm-4-P-Satz kein eigenes Preiseinheit-Feld besitzt (Feld `off+3` ist das Rabattkennzeichen), übernimmt BeLiKo bei der Preisnormierung automatisch die im Artikelstamm (`A`-Satz bzw. Datenbank) hinterlegte Preiseinheit (`PE = 100` / `1000`), sodass auch bei Löffelhardt und Granzow keine Faktor-100-Fehler bei Kabeln oder Kleinmaterial entstehen.

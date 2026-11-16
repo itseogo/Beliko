@@ -243,4 +243,54 @@ with app.app_context():
         assert art_nym.preiseinheit == 100
         assert art_nym.listenpreis == Decimal("1.1392")
 
-print("DATANORM + PREISPFLEGE + KUPFER + ZIP + LOESCH + LOEFFELHARDT TESTS OK")
+# Schritt 8: 3-Spalten Lieferanten-Vergleich über EAN
+post("/einstellungen/lieferanten/neu", {"name": "Rexel Germany", "active": "1"})
+post("/einstellungen/lieferanten/neu", {"name": "Emil Löffelhardt", "active": "1"})
+
+# Gleicher Artikel (EAN 4001869181394 = Siemens LS-Schalter 5SY4116-7) bei Rexel (Lieferant 2) und Löffelhardt (Lieferant 3)
+DN_REXEL_VERGLEICH = (
+    "A;N;2641482;00;SIEMENSN 5SY4116-7;LS-Schalter 230/400V 10kA 1pol C16A;1;0;Stck;1240;8622;2\r\n"
+    "B;N;2641482;5SY41167;5SY4116-7;;0;0;0;4001869181394;;2070;0;0\r\n"
+).encode("cp1252")
+
+DN_LOEFFEL_VERGLEICH = (
+    "A;N;0099112;00;Siemens 5SY41167 LS-Schalter; C16A 1-polig 10kA;1;0;ST;1185;A510;2\r\n"
+    "B;N;0099112;Siemens5SY41167;5SY4116-7;;0;0;0;4001869181394;;2070;0;0\r\n"
+).encode("cp1252")
+
+t = tok(get("/artikel/import").get_data(as_text=True))
+c.post("/artikel/import", data={
+    "_csrf": t,
+    "datei": (io.BytesIO(DN_REXEL_VERGLEICH), "datanorm.001"),
+    "supplier_id": "2",
+    "modus": "voll",
+}, follow_redirects=True)
+
+t = tok(get("/artikel/import").get_data(as_text=True))
+c.post("/artikel/import", data={
+    "_csrf": t,
+    "datei": (io.BytesIO(DN_LOEFFEL_VERGLEICH), "datanorm.001"),
+    "supplier_id": "3",
+    "modus": "voll",
+}, follow_redirects=True)
+
+# Materialübersicht zeigt "Vergleichen (3)" für EAN 4001869181394
+html_liste = get("/artikel?ansicht=liste&q=4001869181394").get_data(as_text=True)
+assert "Vergleichen (3)" in html_liste
+
+# 3-Spalten-Vergleich ohne Suchbegriff (zeigt automatisch gemeinsame EANs über alle 3 Lieferanten)
+html_vgl = get("/artikel?ansicht=vergleich&s1=1&s2=2&s3=3").get_data(as_text=True)
+assert "Spalte 1: Emil Löffelhardt" in html_vgl or "Spalte 1: Fega &amp; Schmitt" in html_vgl
+assert "4001869181394" in html_vgl
+assert "120462" in html_vgl    # Fega Artikelnr. (31,50 €)
+assert "2641482" in html_vgl   # Rexel Artikelnr. (12,40 €)
+assert "0099112" in html_vgl   # Löffelhardt Artikelnr. (11,85 € = Günstigster!)
+assert "Günstigster" in html_vgl
+assert "11,85" in html_vgl
+
+# Suche im Vergleich über die Fega-Artikelnummer "120462" findet über die EAN auch Rexel und Löffelhardt!
+html_vgl_artnr = get("/artikel?ansicht=vergleich&s1=1&s2=2&s3=3&q=120462").get_data(as_text=True)
+assert "2641482" in html_vgl_artnr
+assert "0099112" in html_vgl_artnr
+
+print("DATANORM + PREISPFLEGE + KUPFER + ZIP + LOESCH + LOEFFELHARDT + 3-SPALTEN-VERGLEICH TESTS OK")

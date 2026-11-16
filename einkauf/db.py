@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from . import config
 from .models import Base, Meta, NumberRange, Order
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 
 def _spalten_ergaenzen(engine, tabelle, spalten):
@@ -101,6 +101,37 @@ def migrate(engine):
             "matchcode": "VARCHAR(50)",
             "hersteller_artnr": "VARCHAR(100)",
         })
+    if aktuell < 14:
+        # Artikel je Lieferant erlauben (globales UNIQUE auf artikelnr aufheben, Indizes auf ean/artikelnr/supplier_id)
+        insp = inspect(engine)
+        if engine.dialect.name in ("mysql", "mariadb"):
+            idxs = insp.get_indexes("articles")
+            with engine.begin() as conn:
+                for ix in idxs:
+                    if ix.get("unique") and ix.get("column_names") == ["artikelnr"]:
+                        conn.execute(text(f"ALTER TABLE articles DROP INDEX `{ix['name']}`"))
+                vorhandene_ix = {ix["name"] for ix in inspect(engine).get_indexes("articles")}
+                if "ix_articles_artikelnr" not in vorhandene_ix:
+                    conn.execute(text("CREATE INDEX ix_articles_artikelnr ON articles (artikelnr)"))
+                if "ix_articles_ean" not in vorhandene_ix:
+                    conn.execute(text("CREATE INDEX ix_articles_ean ON articles (ean)"))
+                if "ix_articles_supplier_id" not in vorhandene_ix:
+                    conn.execute(text("CREATE INDEX ix_articles_supplier_id ON articles (supplier_id)"))
+        elif engine.dialect.name == "sqlite":
+            uqs = insp.get_unique_constraints("articles")
+            idxs = insp.get_indexes("articles")
+            hat_uq = any(u.get("column_names") == ["artikelnr"] for u in uqs) or any(
+                ix.get("unique") and ix.get("column_names") == ["artikelnr"] for ix in idxs
+            )
+            if hat_uq:
+                spalten = [c["name"] for c in insp.get_columns("articles")]
+                cols_sql = ", ".join(spalten)
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE articles RENAME TO articles_alt_13"))
+                Base.metadata.tables["articles"].create(engine)
+                with engine.begin() as conn:
+                    conn.execute(text(f"INSERT INTO articles ({cols_sql}) SELECT {cols_sql} FROM articles_alt_13"))
+                    conn.execute(text("DROP TABLE articles_alt_13"))
     with Session(engine) as s:
         row = s.get(Meta, "schema_version")
         if row is None:

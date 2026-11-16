@@ -2244,12 +2244,235 @@ def sperre_ping(obj_typ, obj_id):
 @main.route("/artikel")
 @login_required
 def artikel():
+    ansicht = request.args.get("ansicht", "liste")
+    if ansicht not in ("liste", "vergleich"):
+        ansicht = "liste"
     suche = (request.args.get("q") or "").strip()
-    q = g.db.query(Article).options(joinedload(Article.supplier)).order_by(Article.artikelnr)
+    lief_id = request.args.get("lieferant", type=int)
+    nur_kupfer = request.args.get("nur_kupfer") == "1"
+
+    lieferanten = g.db.query(Supplier).order_by(Supplier.name).all()
+    anz_je_lief = dict(
+        g.db.query(Article.supplier_id, func.count(Article.id))
+        .group_by(Article.supplier_id)
+        .all()
+    )
+    gesamt = sum(anz_je_lief.values())
+
+    if ansicht == "vergleich":
+        lief_map = {l.id: l for l in lieferanten}
+        hat_spalten_param = any(k in request.args for k in ("s1", "s2", "s3"))
+        if hat_spalten_param:
+            s1 = request.args.get("s1", type=int) or 0
+            s2 = request.args.get("s2", type=int) or 0
+            s3 = request.args.get("s3", type=int) or 0
+        else:
+            lief_mit_art = [l.id for l in lieferanten if anz_je_lief.get(l.id, 0) > 0]
+            if not lief_mit_art:
+                lief_mit_art = [l.id for l in lieferanten]
+            s1 = lief_mit_art[0] if len(lief_mit_art) > 0 else 0
+            s2 = lief_mit_art[1] if len(lief_mit_art) > 1 else 0
+            s3 = lief_mit_art[2] if len(lief_mit_art) > 2 else 0
+
+        spalten_ids = []
+        for sid in (s1, s2, s3):
+            if sid and sid in lief_map and sid not in spalten_ids:
+                spalten_ids.append(sid)
+        spalten_lief = [lief_map[sid] for sid in spalten_ids]
+
+        if "nur_gemeinsame" in request.args or hat_spalten_param:
+            nur_gemeinsame = request.args.get("nur_gemeinsame") == "1"
+        else:
+            nur_gemeinsame = not bool(suche)
+
+        vergleich_zeilen = []
+        if spalten_ids:
+            basis_q = g.db.query(Article).options(joinedload(Article.supplier)).filter(Article.supplier_id.in_(spalten_ids))
+            if nur_kupfer:
+                basis_q = basis_q.filter(or_(Article.kupfergewicht.isnot(None), Article.kupferbasis.isnot(None)))
+
+            if suche:
+                like = f"%{suche}%"
+                direkt_treffer = basis_q.filter(or_(
+                    Article.artikelnr.like(like),
+                    Article.bezeichnung.like(like),
+                    Article.kurztext2.like(like),
+                    Article.ean.like(like),
+                    Article.hersteller_artnr.like(like),
+                    Article.matchcode.like(like),
+                )).limit(600).all()
+
+                gef_eans = {a.ean.strip() for a in direkt_treffer if a.ean and a.ean.strip()}
+                gef_herst = {a.hersteller_artnr.strip() for a in direkt_treffer if a.hersteller_artnr and a.hersteller_artnr.strip()}
+                gef_ids = {a.id for a in direkt_treffer}
+
+                filter_teile = []
+                if gef_ids:
+                    filter_teile.append(Article.id.in_(gef_ids))
+                if gef_eans:
+                    filter_teile.append(Article.ean.in_(gef_eans))
+                if gef_herst:
+                    filter_teile.append(Article.hersteller_artnr.in_(gef_herst))
+
+                if filter_teile:
+                    alle_art = (
+                        g.db.query(Article)
+                        .options(joinedload(Article.supplier))
+                        .filter(Article.supplier_id.in_(spalten_ids), or_(*filter_teile))
+                        .limit(1500)
+                        .all()
+                    )
+                else:
+                    alle_art = []
+            else:
+                if nur_gemeinsame and len(spalten_ids) >= 2:
+                    gem_eans = [
+                        r[0] for r in g.db.query(Article.ean)
+                        .filter(Article.supplier_id.in_(spalten_ids), Article.ean.isnot(None), Article.ean != "")
+                        .group_by(Article.ean)
+                        .having(func.count(func.distinct(Article.supplier_id)) >= 2)
+                        .order_by(Article.ean)
+                        .limit(250)
+                        .all()
+                    ]
+                    if nur_kupfer and gem_eans:
+                        gem_eans = [
+                            r[0] for r in g.db.query(Article.ean)
+                            .filter(
+                                Article.supplier_id.in_(spalten_ids),
+                                Article.ean.in_(gem_eans),
+                                or_(Article.kupfergewicht.isnot(None), Article.kupferbasis.isnot(None)),
+                            )
+                            .distinct()
+                            .all()
+                        ]
+                    if gem_eans:
+                        alle_art = (
+                            g.db.query(Article)
+                            .options(joinedload(Article.supplier))
+                            .filter(Article.supplier_id.in_(spalten_ids), Article.ean.in_(gem_eans))
+                            .all()
+                        )
+                    else:
+                        alle_art = []
+                else:
+                    erste_art = basis_q.order_by(Article.artikelnr).limit(300).all()
+                    gef_eans = {a.ean.strip() for a in erste_art if a.ean and a.ean.strip()}
+                    gef_ids = {a.id for a in erste_art}
+                    filter_teile = [Article.id.in_(gef_ids)] if gef_ids else []
+                    if gef_eans:
+                        filter_teile.append(Article.ean.in_(gef_eans))
+                    alle_art = (
+                        g.db.query(Article)
+                        .options(joinedload(Article.supplier))
+                        .filter(Article.supplier_id.in_(spalten_ids), or_(*filter_teile))
+                        .limit(900)
+                        .all()
+                    ) if filter_teile else []
+
+            gruppen = {}
+            for a in alle_art:
+                if a.ean and a.ean.strip():
+                    schluessel = f"EAN:{a.ean.strip()}"
+                elif a.hersteller_artnr and a.hersteller_artnr.strip():
+                    schluessel = f"HERST:{a.hersteller_artnr.strip().upper()}"
+                else:
+                    schluessel = f"ART:{a.artikelnr.strip().upper()}"
+
+                if schluessel not in gruppen:
+                    gruppen[schluessel] = {"leit": a, "je_lief": {}}
+                # Falls mehrere Artikel eines Lieferanten dieselbe EAN haben, den mit Preis bevorzugen
+                vorh = gruppen[schluessel]["je_lief"].get(a.supplier_id)
+                if vorh is None or (vorh.listenpreis is None and a.listenpreis is not None):
+                    gruppen[schluessel]["je_lief"][a.supplier_id] = a
+
+            for schluessel, grp in gruppen.items():
+                je_lief = grp["je_lief"]
+                anz_treffer = len(je_lief)
+                if nur_gemeinsame and len(spalten_ids) >= 2 and anz_treffer < 2:
+                    continue
+                leit = grp["leit"]
+                preise_vorh = [
+                    art.listenpreis for art in je_lief.values()
+                    if art.listenpreis is not None and art.listenpreis > 0
+                ]
+                min_p = min(preise_vorh) if len(preise_vorh) >= 2 else None
+                max_p = max(preise_vorh) if len(preise_vorh) >= 2 else None
+                vergleich_zeilen.append({
+                    "schluessel": schluessel,
+                    "bezeichnung": leit.bezeichnung,
+                    "kurztext2": leit.kurztext2,
+                    "ean": leit.ean,
+                    "hersteller_artnr": leit.hersteller_artnr,
+                    "einheit": leit.einheit,
+                    "je_lief": je_lief,
+                    "anz_treffer": anz_treffer,
+                    "min_preis": min_p,
+                    "max_preis": max_p,
+                    "hat_unterschied": (min_p is not None and max_p is not None and max_p > min_p),
+                })
+
+            vergleich_zeilen.sort(key=lambda z: (-z["anz_treffer"], (z["bezeichnung"] or "").lower()))
+
+        return render_template(
+            "artikel.html",
+            ansicht="vergleich",
+            suche=suche,
+            nur_kupfer=nur_kupfer,
+            nur_gemeinsame=nur_gemeinsame,
+            lieferanten=lieferanten,
+            anz_je_lief=anz_je_lief,
+            gesamt=gesamt,
+            s1=s1,
+            s2=s2,
+            s3=s3,
+            spalten_lief=spalten_lief,
+            vergleich_zeilen=vergleich_zeilen[:250],
+            vergleich_gesamt=len(vergleich_zeilen),
+        )
+
+    # Standard-Ansicht: Materialübersicht (Liste)
+    q = g.db.query(Article).options(joinedload(Article.supplier))
+    if lief_id:
+        q = q.filter(Article.supplier_id == lief_id)
+    if nur_kupfer:
+        q = q.filter(or_(Article.kupfergewicht.isnot(None), Article.kupferbasis.isnot(None)))
     if suche:
         like = f"%{suche}%"
-        q = q.filter(or_(Article.artikelnr.like(like), Article.bezeichnung.like(like)))
-    return render_template("artikel.html", artikel=q.limit(500).all(), suche=suche, gesamt=g.db.query(Article).count())
+        q = q.filter(or_(
+            Article.artikelnr.like(like),
+            Article.bezeichnung.like(like),
+            Article.kurztext2.like(like),
+            Article.ean.like(like),
+            Article.hersteller_artnr.like(like),
+            Article.matchcode.like(like),
+        ))
+    treffer_anz = q.count()
+    artikel_liste = q.order_by(Article.artikelnr).limit(500).all()
+
+    eans_auf_seite = {a.ean for a in artikel_liste if a.ean}
+    ean_lief_anz = {}
+    if eans_auf_seite:
+        ean_lief_anz = dict(
+            g.db.query(Article.ean, func.count(func.distinct(Article.supplier_id)))
+            .filter(Article.ean.in_(eans_auf_seite))
+            .group_by(Article.ean)
+            .all()
+        )
+
+    return render_template(
+        "artikel.html",
+        ansicht="liste",
+        artikel=artikel_liste,
+        suche=suche,
+        lief_id=lief_id,
+        nur_kupfer=nur_kupfer,
+        lieferanten=lieferanten,
+        anz_je_lief=anz_je_lief,
+        ean_lief_anz=ean_lief_anz,
+        treffer_anz=treffer_anz,
+        gesamt=gesamt,
+    )
 
 
 @main.route("/artikel/import", methods=["GET", "POST"])
@@ -2272,7 +2495,12 @@ def artikel_import():
             flash(f"Datanorm-Datei nicht lesbar: {e}", "fehler")
             return redirect(url_for("main.artikel_import"))
 
-        bestehende = {a.artikelnr: a for a in g.db.query(Article).all()}
+        if sid:
+            bestehende = {a.artikelnr: a for a in g.db.query(Article).filter(Article.supplier_id == sid).all()}
+            if not bestehende and ((modus == "nur_preise") or (modus == "auto" and r.get("ist_reine_preisdatei"))):
+                bestehende = {a.artikelnr: a for a in g.db.query(Article).filter(Article.supplier_id.is_(None)).all()}
+        else:
+            bestehende = {a.artikelnr: a for a in g.db.query(Article).filter(Article.supplier_id.is_(None)).all()}
 
         if r.get("ist_reine_loeschdatei"):
             loesch_kand = [bestehende[artnr] for artnr in r.get("loeschungen", []) if artnr in bestehende]

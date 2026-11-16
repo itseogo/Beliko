@@ -1,20 +1,224 @@
-{% extends 'base.html' %}{% block title %}Artikelstamm{% endblock %}
+{% extends 'base.html' %}{% block title %}Datanorm / Artikelstamm{% endblock %}
 {% block content %}
 <div class="kopf">
-  <h1>Artikelstamm ({{ gesamt }})</h1>
-  {% if g.user.role != 'leser' %}<a class="btn" href="{{ url_for('main.artikel_import') }}">Datanorm importieren</a>{% endif %}
+  <div>
+    <h1>Datanorm / Artikelstamm ({{ gesamt }})</h1>
+    <p class="meta">Eingelesenes Material aus Datanorm-Stamm- und Preispflegedateien inkl. 3-Spalten-Lieferantenvergleich über EAN.</p>
+  </div>
+  <div class="actions">
+    {% if ansicht == 'vergleich' %}
+      <a class="btn sek" href="{{ url_for('main.artikel', ansicht='liste', q=suche) }}">📋 Materialübersicht</a>
+    {% else %}
+      <a class="btn sek" href="{{ url_for('main.artikel', ansicht='vergleich', q=suche) }}">⚖️ Lieferanten-Vergleich (3 Spalten)</a>
+    {% endif %}
+    {% if g.user.role != 'leser' %}
+      <a class="btn" href="{{ url_for('main.artikel_import') }}">Datanorm importieren</a>
+    {% endif %}
+  </div>
 </div>
 
+<nav class="tabs" aria-label="Artikelstamm-Ansichten">
+  <a class="{{ 'on' if ansicht == 'liste' else '' }}" href="{{ url_for('main.artikel', ansicht='liste', q=suche) }}">Materialübersicht ({{ gesamt }})</a>
+  <a class="{{ 'on' if ansicht == 'vergleich' else '' }}" href="{{ url_for('main.artikel', ansicht='vergleich', q=suche) }}">⚖️ Lieferanten-Vergleich (bis zu 3 Spalten)</a>
+</nav>
+
+{% if ansicht == 'vergleich' %}
+{# ==================== REITER 2: 3-SPALTEN LIEFERANTEN-VERGLEICH ==================== #}
+<form method="get" class="panel" style="margin-top:0">
+  <input type="hidden" name="ansicht" value="vergleich">
+  <h3 style="margin-top:0">Spalten auswählen (bis zu 3 Lieferanten nebeneinander)</h3>
+  <div class="spalten-grid">
+    <div class="spalten-box {{ 'aktiv' if s1 else '' }}">
+      <label class="f">
+        <span>Spalte 1 – Lieferant 1</span>
+        <select name="s1" onchange="this.form.submit()">
+          <option value="0">– bitte wählen –</option>
+          {% for l in lieferanten %}
+            <option value="{{ l.id }}" {{ 'selected' if s1 == l.id else '' }}>{{ l.name }} ({{ anz_je_lief.get(l.id, 0) }} Art.)</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="spalten-box {{ 'aktiv' if s2 else '' }}">
+      <label class="f">
+        <span>Spalte 2 – Lieferant 2</span>
+        <select name="s2" onchange="this.form.submit()">
+          <option value="0">– keine 2. Spalte –</option>
+          {% for l in lieferanten %}
+            <option value="{{ l.id }}" {{ 'selected' if s2 == l.id else '' }}>{{ l.name }} ({{ anz_je_lief.get(l.id, 0) }} Art.)</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="spalten-box {{ 'aktiv' if s3 else '' }}">
+      <label class="f">
+        <span>Spalte 3 – Lieferant 3</span>
+        <select name="s3" onchange="this.form.submit()">
+          <option value="0">– keine 3. Spalte –</option>
+          {% for l in lieferanten %}
+            <option value="{{ l.id }}" {{ 'selected' if s3 == l.id else '' }}>{{ l.name }} ({{ anz_je_lief.get(l.id, 0) }} Art.)</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div class="leiste" style="margin-top:.6rem">
+    <label class="f" style="flex:1;min-width:18rem">
+      <span>Artikel suchen (EAN, Bezeichnung, Hersteller-Nr. oder Lieferanten-Artikelnr.)</span>
+      <input name="q" value="{{ suche }}" placeholder="z. B. 4001869181219, NYM-J 5x 1,5, 5SY4116 oder Artikelnr.">
+    </label>
+    <label class="check" style="margin:0 0 .35rem">
+      <input type="checkbox" name="nur_gemeinsame" value="1" {{ 'checked' if nur_gemeinsame else '' }} onchange="this.form.submit()">
+      <span>Nur übereinstimmende Artikel (gleiche EAN bei mind. 2 Lieferanten)</span>
+    </label>
+    <label class="check" style="margin:0 0 .35rem">
+      <input type="checkbox" name="nur_kupfer" value="1" {{ 'checked' if nur_kupfer else '' }} onchange="this.form.submit()">
+      <span>Nur Kupfer-Artikel</span>
+    </label>
+    <button class="btn">Vergleichen</button>
+    {% if suche or nur_kupfer %}
+      <a class="btn sek" href="{{ url_for('main.artikel', ansicht='vergleich', s1=s1, s2=s2, s3=s3, nur_gemeinsame='1') }}">Zurücksetzen</a>
+    {% endif %}
+  </div>
+</form>
+
+{% if not spalten_lief %}
+  <p class="leer">Bitte oben mindestens einen Lieferanten auswählen, um den Vergleich zu starten.</p>
+{% elif vergleich_zeilen %}
+  <p class="meta">
+    Zeige <b>{{ vergleich_zeilen|length }}</b>{% if vergleich_gesamt > vergleich_zeilen|length %} von {{ vergleich_gesamt }}{% endif %} verglichenen Artikeln
+    für {% for l in spalten_lief %}<b>{{ l.name }}</b>{% if not loop.last %} vs. {% endif %}{% endfor %}.
+    Die Zuordnung erfolgt automatisch über die <b>EAN-Nummer</b> (bzw. Hersteller-Artikelnummer).
+  </p>
+  <div class="scroll">
+    <table class="vergleich">
+      <thead>
+        <tr>
+          <th>Artikel / EAN (Übereinstimmungsmerkmal)</th>
+          {% for l in spalten_lief %}
+            <th class="sp-kopf">
+              Spalte {{ loop.index }}: {{ l.name }}
+              <small class="sub" style="font-weight:400">{{ anz_je_lief.get(l.id, 0) }} Artikel im Stamm</small>
+            </th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for z in vergleich_zeilen %}
+        <tr>
+          <td>
+            <b>{{ z.bezeichnung }}</b>
+            {% if z.kurztext2 %}<small class="sub">{{ z.kurztext2 }}</small>{% endif %}
+            <div style="margin-top:.25rem;display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+              {% if z.ean %}<span class="ean-tag">EAN {{ z.ean }}</span>{% endif %}
+              {% if z.hersteller_artnr %}<small class="sub" style="display:inline">Herst. {{ z.hersteller_artnr }}</small>{% endif %}
+              <small class="sub" style="display:inline">· Einheit: <b>{{ z.einheit or 'Stück' }}</b></small>
+            </div>
+          </td>
+          {% for l in spalten_lief %}
+            {% set art = z.je_lief.get(l.id) %}
+            {% set ist_guenstig = art and art.listenpreis is not none and z.min_preis is not none and z.hat_unterschied and art.listenpreis == z.min_preis %}
+            <td class="sp-zelle {{ 'guenstig' if ist_guenstig else '' }}">
+              {% if art %}
+                <div>
+                  <span class="preis-gross">{{ art.listenpreis|preis if art.listenpreis is not none else '–' }}</span>
+                  {% if ist_guenstig %}
+                    <span class="chip ok">Günstigster</span>
+                  {% elif art.listenpreis is not none and z.min_preis is not none and art.listenpreis > z.min_preis %}
+                    <span class="preis-diff">+{{ (art.listenpreis - z.min_preis)|preis }} (+{{ (((art.listenpreis - z.min_preis) / z.min_preis) * 100)|round(1) }} %)</span>
+                  {% endif %}
+                </div>
+                <small class="sub">
+                  Art.-Nr.: <b>{{ art.artikelnr }}</b>
+                  {% if art.preiseinheit and art.preiseinheit > 1 %} · PE {{ art.preiseinheit }}{% endif %}
+                  {% if art.rabattgruppe %} · RG {{ art.rabattgruppe }}{% endif %}
+                </small>
+                {% if art.bezeichnung != z.bezeichnung %}
+                  <small class="sub">{{ art.bezeichnung }}</small>
+                {% endif %}
+                {% if art.kupfergewicht or art.kupferbasis %}
+                  <small class="sub">
+                    Cu: <b>{{ art.kupfergewicht|qty }} kg</b>{% if art.einheit == 'm' %} / 100m{% elif art.kupfermerker == 3 %} / Stk{% elif art.kupfermerker in (1, 2) %} / 100 {{ art.einheit or 'Stk' }}{% endif %}
+                    {% if art.kupferbasis %} · Basis {{ art.kupferbasis|money }}{% endif %}
+                  </small>
+                {% endif %}
+              {% else %}
+                <small class="sub">– nicht im Sortiment –</small>
+              {% endif %}
+            </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="leer">
+    Keine passenden Vergleichsartikel für die aktuelle Auswahl gefunden.
+    {% if nur_gemeinsame %}
+      Tipp: Deaktiviere den Haken „Nur übereinstimmende Artikel“ oder gib oben einen Suchbegriff (z. B. Bezeichnung oder EAN) ein, bzw. importiere zuerst die Datanorm-Dateien weiterer Lieferanten.
+    {% endif %}
+  </p>
+{% endif %}
+
+{% else %}
+{# ==================== REITER 1: MATERIALÜBERSICHT (LISTE) ==================== #}
+{% if lieferanten %}
+<div class="lief-pills">
+  <a class="chip {{ 'on' if not lief_id else '' }}" href="{{ url_for('main.artikel', ansicht='liste', q=suche, nur_kupfer='1' if nur_kupfer else '') }}">Alle Lieferanten ({{ gesamt }})</a>
+  {% for l in lieferanten %}
+    {% if anz_je_lief.get(l.id, 0) > 0 or lief_id == l.id %}
+      <a class="chip {{ 'on' if lief_id == l.id else '' }}" href="{{ url_for('main.artikel', ansicht='liste', lieferant=l.id, q=suche, nur_kupfer='1' if nur_kupfer else '') }}">{{ l.name }} ({{ anz_je_lief.get(l.id, 0) }})</a>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
 <form method="get" class="leiste">
-  <label class="f"><span>Suchen</span><input name="q" value="{{ suche }}" placeholder="Artikelnr. oder Bezeichnung"></label>
+  <input type="hidden" name="ansicht" value="liste">
+  <label class="f" style="flex:1;min-width:16rem">
+    <span>Suchen (Artikelnr., Bezeichnung, EAN, Hersteller-Nr.)</span>
+    <input name="q" value="{{ suche }}" placeholder="Artikelnr., Bezeichnung oder EAN">
+  </label>
+  <label class="f">
+    <span>Lieferant</span>
+    <select name="lieferant" onchange="this.form.submit()">
+      <option value="">Alle Lieferanten ({{ gesamt }})</option>
+      {% for l in lieferanten %}
+        <option value="{{ l.id }}" {{ 'selected' if lief_id == l.id else '' }}>{{ l.name }} ({{ anz_je_lief.get(l.id, 0) }})</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="check" style="margin:0 0 .35rem">
+    <input type="checkbox" name="nur_kupfer" value="1" {{ 'checked' if nur_kupfer else '' }} onchange="this.form.submit()">
+    <span>Nur mit Kupfer</span>
+  </label>
   <button class="btn sek">Filtern</button>
+  {% if suche or lief_id or nur_kupfer %}
+    <a class="btn sek" href="{{ url_for('main.artikel', ansicht='liste') }}">Zurücksetzen</a>
+  {% endif %}
 </form>
 
 {% if artikel %}
+{% if treffer_anz > artikel|length %}
+  <p class="meta">Zeige die ersten {{ artikel|length }} von {{ treffer_anz }} gefundenen Artikeln. Bitte Suche eingrenzen für gezieltere Treffer.</p>
+{% endif %}
 <div class="scroll"><table>
-  <thead><tr><th>Artikelnr.</th><th>Bezeichnung</th><th>Einheit</th><th class="r">Listenpreis</th><th>Kupfer / EAN</th><th>Rabattgr.</th><th>Lieferant</th></tr></thead>
+  <thead>
+    <tr>
+      <th>Artikelnr.</th>
+      <th>Bezeichnung</th>
+      <th>Einheit</th>
+      <th class="r">Preis</th>
+      <th>Kupfer / EAN</th>
+      <th>Rabattgr.</th>
+      <th>Lieferant</th>
+      <th class="r">Vergleich</th>
+    </tr>
+  </thead>
   <tbody>{% for a in artikel %}<tr>
-    <td>{{ a.artikelnr }}</td>
+    <td><b>{{ a.artikelnr }}</b></td>
     <td>
       {{ a.bezeichnung }}{% if a.kurztext2 %}<small class="sub">{{ a.kurztext2 }}</small>{% endif %}
       {% if a.matchcode or a.hersteller_artnr %}<small class="sub meta">{% if a.matchcode %}{{ a.matchcode }}{% endif %}{% if a.hersteller_artnr %} · Herst. {{ a.hersteller_artnr }}{% endif %}</small>{% endif %}
@@ -34,10 +238,17 @@
     </td>
     <td>{{ a.rabattgruppe or '–' }}</td>
     <td>{{ a.supplier.name if a.supplier else '–' }}</td>
+    <td class="r">
+      {% set v_such = a.ean or a.hersteller_artnr or a.artikelnr %}
+      {% set anz_h = ean_lief_anz.get(a.ean, 1) if a.ean else 1 %}
+      <a class="btn sek klein" href="{{ url_for('main.artikel', ansicht='vergleich', q=v_such, nur_gemeinsame='0') }}" title="Diesen Artikel über EAN mit bis zu 3 Lieferanten vergleichen">
+        ⚖️ Vergleichen{% if anz_h > 1 %} ({{ anz_h }}){% endif %}
+      </a>
+    </td>
   </tr>{% endfor %}</tbody>
 </table></div>
 {% else %}
-<p class="leer">Noch keine Artikel im Stamm. Über „Datanorm importieren“ kannst du Artikeldaten (Datanorm 4/5) einlesen.</p>
+<p class="leer">Noch keine passenden Artikel im Stamm. Über „Datanorm importieren“ kannst du Artikeldaten (Datanorm 4/5) einlesen.</p>
+{% endif %}
 {% endif %}
 {% endblock %}
-

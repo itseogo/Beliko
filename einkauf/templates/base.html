@@ -47,7 +47,12 @@
       <a class="t-item {{ 'on' if ep == 'main.rueckstand' }}" href="{{ url_for('main.rueckstand') }}">Rückstand{% if rueckstand_anz %} <span class="n">{{ rueckstand_anz }}</span>{% endif %}</a>
       <a class="t-item {{ 'on' if ep.startswith('main.lieferschein') }}" href="{{ url_for('main.lieferscheine') }}">Lieferscheine</a>
       <a class="t-item {{ 'on' if ep.startswith('main.datei') }}" href="{{ url_for('main.dateien') }}">Lieferantendateien{% if dateien_neu %} <span class="n">{{ dateien_neu }}</span>{% endif %}</a>
-      <a class="t-item {{ 'on' if ep.startswith('main.artikel') }}" href="{{ url_for('main.artikel') }}">Artikelstamm</a>
+      <details class="t-sub" {{ 'open' if ep.startswith('main.artikel') }}>
+        <summary class="{{ 'on' if ep == 'main.artikel' and request.args.get('ansicht', 'liste') != 'vergleich' }}"><a href="{{ url_for('main.artikel') }}" class="{{ 'on' if ep == 'main.artikel' and request.args.get('ansicht', 'liste') != 'vergleich' }}">Artikelstamm</a></summary>
+        <a class="t-item leaf {{ 'on' if ep == 'main.artikel' and request.args.get('ansicht', 'liste') == 'liste' }}" href="{{ url_for('main.artikel', ansicht='liste') }}">Materialübersicht</a>
+        <a class="t-item leaf {{ 'on' if ep == 'main.artikel' and request.args.get('ansicht') == 'vergleich' }}" href="{{ url_for('main.artikel', ansicht='vergleich') }}">Lieferanten-Vergleich</a>
+        {% if g.user.role != 'leser' %}<a class="t-item leaf {{ 'on' if ep == 'main.artikel_import' }}" href="{{ url_for('main.artikel_import') }}">Datanorm importieren</a>{% endif %}
+      </details>
       <a class="t-item {{ 'on' if ep.startswith('main.rechnungen') }}" href="{{ url_for('main.rechnungen') }}">Rechnungen</a>
       <details class="t-sub" open>
         <summary class="{{ 'on' if ep == 'main.bestellungen' and not ast }}"><a href="{{ url_for('main.bestellungen') }}" class="{{ 'on' if ep == 'main.bestellungen' and not ast }}">Bestellungen</a></summary>

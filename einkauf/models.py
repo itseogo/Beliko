@@ -466,10 +466,10 @@ class AuditLog(Base):
 
 
 class Article(Base):
-    """Artikelstamm (z. B. aus Datanorm-Import)."""
+    """Artikelstamm (z. B. aus Datanorm-Import, je Lieferant)."""
     __tablename__ = "articles"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    artikelnr: Mapped[str] = mapped_column(String(100), unique=True)
+    artikelnr: Mapped[str] = mapped_column(String(100), index=True)
     bezeichnung: Mapped[str] = mapped_column(String(300))
     kurztext2: Mapped[str | None] = mapped_column(String(300))
     einheit: Mapped[str | None] = mapped_column(String(20))
@@ -479,10 +479,10 @@ class Article(Base):
     kupferbasis: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     kupfergewicht: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
     kupfermerker: Mapped[int | None] = mapped_column(Integer)
-    ean: Mapped[str | None] = mapped_column(String(30))
+    ean: Mapped[str | None] = mapped_column(String(30), index=True)
     matchcode: Mapped[str | None] = mapped_column(String(50))
     hersteller_artnr: Mapped[str | None] = mapped_column(String(100))
-    supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"))
+    supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"), index=True)
     quelle: Mapped[str] = mapped_column(String(20), default="datanorm")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     supplier: Mapped["Supplier | None"] = relationship()
