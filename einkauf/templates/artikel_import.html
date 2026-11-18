@@ -3,31 +3,41 @@
 <p class="krumen"><a href="{{ url_for('main.artikel') }}">← Zurück zum Artikelstamm</a></p>
 <form method="post" enctype="multipart/form-data" class="panel">
   <h1>Datanorm importieren</h1>
-  <p class="meta">Liest Datanorm-Textdateien (Version 4 oder 5, Semikolon-getrennt, Satzarten A und P) ein und aktualisiert den Artikelstamm.</p>
+  <p class="meta">Liest Datanorm-Dateien und ZIP-Archive (Version 4 oder 5, Satzarten A, B, P, S, R) ein und aktualisiert den Artikelstamm des gewählten Lieferanten.</p>
   {{ csrf() }}
   <div class="grid2">
-    <label class="f"><span>Datanorm-Datei</span><input type="file" name="datei" required></label>
-    <label class="f"><span>Lieferant (optional)</span><select name="supplier_id">
+    <label class="f"><span>Datanorm-Datei (.001, .zip, datpreis.001)</span><input type="file" name="datei" required></label>
+    <label class="f"><span>Lieferant</span><select name="supplier_id">
       <option value="">– keiner –</option>
       {% for l in lieferanten %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}
     </select></label>
   </div>
-  <div style="margin:1rem 0;padding:.85rem 1rem;background:var(--head-bg);border:1px solid var(--line);border-radius:6px">
-    <span style="font-weight:700;display:block;margin-bottom:.5rem">Import-Modus</span>
-    <label class="check" style="display:flex;align-items:flex-start;gap:.5rem;margin-bottom:.45rem;cursor:pointer">
-      <input type="radio" name="modus" value="auto" checked style="margin-top:.2rem">
-      <span><b>Automatisch erkennen (empfohlen)</b>: Legt neue Artikel an und aktualisiert bestehende. Erkennt reine Preisdateien (Satzart P) selbstständig.</span>
-    </label>
-    <label class="check" style="display:flex;align-items:flex-start;gap:.5rem;margin-bottom:.45rem;cursor:pointer">
-      <input type="radio" name="modus" value="nur_preise" style="margin-top:.2rem">
-      <span><b>Nur Preise aktualisieren (Preispflege / DATPREIS)</b>: Aktualisiert nur die Listenpreise bereits vorhandener Artikel. Legt keine neuen Artikel an und verändert keine Artikeltexte.</span>
-    </label>
-    <label class="check" style="display:flex;align-items:flex-start;gap:.5rem;cursor:pointer">
-      <input type="radio" name="modus" value="voll" style="margin-top:.2rem">
-      <span><b>Vollständiger Artikelstamm</b>: Übernimmt Artikeltexte, Einheiten, Rabattgruppen, Kupferbasis/-gewicht und Preise; legt neue Artikel an.</span>
-    </label>
+  <div class="modus-gruppe">
+    <span class="modus-titel">Import-Modus</span>
+    <div class="modus-liste">
+      <label class="modus-karte">
+        <input type="radio" name="modus" value="auto" checked>
+        <div class="modus-text">
+          <b>Automatisch erkennen (empfohlen)</b>
+          <span>Legt neue Artikel an und aktualisiert bestehende. Erkennt reine Preisdateien (Satzart P), ZIP-Archive und Löschpflege selbstständig.</span>
+        </div>
+      </label>
+      <label class="modus-karte">
+        <input type="radio" name="modus" value="nur_preise">
+        <div class="modus-text">
+          <b>Nur Preise aktualisieren (Preispflege / DATPREIS)</b>
+          <span>Aktualisiert nur die Preise bereits vorhandener Artikel. Legt keine neuen Artikel an und verändert keine Artikeltexte.</span>
+        </div>
+      </label>
+      <label class="modus-karte">
+        <input type="radio" name="modus" value="voll">
+        <div class="modus-text">
+          <b>Vollständiger Artikelstamm</b>
+          <span>Übernimmt Artikeltexte, Einheiten, Rabattgruppen, Kupferbasis/-gewicht, EAN und Preise; legt neue Artikel an.</span>
+        </div>
+      </label>
+    </div>
   </div>
   <div class="actions"><button class="btn">Importieren</button><a class="btn sek" href="{{ url_for('main.artikel') }}">Abbrechen</a></div>
 </form>
 {% endblock %}
-

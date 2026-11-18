@@ -58,8 +58,8 @@ a.kpi:hover{text-decoration:none;border-color:var(--blue)}
 .f small{display:block;color:var(--muted);margin-top:.2rem}
 input,select,textarea{width:100%;font:inherit;padding:.5rem .6rem;border:1px solid var(--input-line);border-radius:6px;background:var(--input-bg);color:var(--ink)}
 input.kurz{width:7rem;text-align:right}
-input[type=checkbox]{width:auto}
-.check{display:flex;gap:.5rem;align-items:center;margin:.5rem 0 1rem}
+input[type=checkbox],input[type=radio]{width:auto;flex:0 0 auto}
+.check{display:flex;gap:.55rem;align-items:center;margin:.5rem 0 1rem}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:0 1rem}
 .grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:0 1rem}
 .filter{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:0 1rem;align-items:end;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:1rem 1rem .1rem}
@@ -249,3 +249,15 @@ table.vergleich td.sp-zelle.guenstig{background:var(--green-bg)}
 .preis-gross{font-size:1.06rem;font-weight:700;display:inline-block}
 .preis-diff{font-size:.8rem;color:var(--muted);margin-left:.3rem}
 .ean-tag{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.82rem;background:var(--chip-neu-bg);color:var(--chip-neu-fg);padding:.05rem .45rem;border-radius:4px;display:inline-block}
+
+/* Datanorm-Import: Modus-Auswahlkaestchen sauber untereinander */
+.modus-gruppe{margin:1rem 0 1.25rem;padding:1rem;background:var(--head-bg);border:1px solid var(--line);border-radius:8px}
+.modus-titel{font-weight:700;font-size:.92rem;display:block;margin-bottom:.65rem}
+.modus-liste{display:flex;flex-direction:column;gap:.55rem}
+.modus-karte{display:flex;align-items:flex-start;gap:.75rem;padding:.75rem .9rem;background:var(--panel);border:1px solid var(--line);border-radius:6px;cursor:pointer;margin:0;transition:border-color .15s, background .15s}
+.modus-karte:hover{background:var(--hover);border-color:var(--blue)}
+.modus-karte:has(input:checked){background:var(--sel);border-color:var(--blue)}
+.modus-karte input[type=radio]{width:1.05rem;height:1.05rem;flex:0 0 1.05rem;margin:.18rem 0 0;padding:0;cursor:pointer}
+.modus-text{flex:1;min-width:0;line-height:1.4}
+.modus-text b{display:block;margin-bottom:.15rem;color:var(--ink)}
+.modus-text span{display:block;color:var(--muted);font-size:.9rem}
