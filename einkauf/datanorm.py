@@ -18,6 +18,7 @@ Kupferdaten (Kupfermerker, Kupferbasis z. B. 150 €, Kupfergewicht / Cu-Zahl) w
 gespeichert, um den tagesaktuellen Kupferzuschlag (DEL-Notiz) berechnen zu können.
 """
 from decimal import Decimal, InvalidOperation
+import re
 
 EINHEITEN = {
     "STK": "Stück", "ST": "Stück", "PCE": "Stück", "STCK": "Stück", "STUECK": "Stück",
@@ -25,6 +26,108 @@ EINHEITEN = {
     "PA": "Paar", "PK": "Pack", "PAK": "Pack", "PACK": "Pack", "ROL": "Rolle",
     "K": "kg", "KG": "kg", "G": "g", "GRM": "g", "SET": "Set", "BT": "Beutel",
 }
+
+# Gängige Hersteller-Kürzel der Elektro-Großhändler (Fega, Rexel, Granzow, Löffelhardt)
+HERSTELLER_MAP = {
+    "EATO": "Eaton", "EATON": "Eaton",
+    "SIEM": "Siemens", "SIEMENSN": "Siemens", "SIEMENS": "Siemens",
+    "PHOE": "Phoenix Contact", "PHOENIX": "Phoenix Contact",
+    "HAGE": "Hager", "HAGER": "Hager",
+    "WEID": "Weidmüller", "WEIDMUEL": "Weidmüller", "WEIDMUELLER": "Weidmüller",
+    "OBO": "OBO Bettermann", "BETTERMA": "OBO Bettermann",
+    "BUSC": "Busch-Jaeger", "BJ": "Busch-Jaeger", "B&J": "Busch-Jaeger",
+    "SCHN": "Schneider Electric", "SCHNEID": "Schneider Electric", "SCHNEIDER": "Schneider Electric", "SELE": "Schneider Electric",
+    "NIED": "Niedax", "NIEDAX": "Niedax",
+    "LAPP": "Lapp", "LAPPKABE": "Lapp",
+    "RITT": "Rittal", "RITTAL": "Rittal",
+    "LEGR": "Legrand", "LEGRAND": "Legrand",
+    "CIMC": "Cimco", "CIMCO": "Cimco",
+    "KLAU": "Klauke", "KLAUKE": "Klauke",
+    "STRI": "Striebel & John",
+    "BERK": "Berker", "BERKER": "Berker",
+    "MERT": "Merten", "MERTEN": "Merten",
+    "KAIS": "Kaiser", "KAISER": "Kaiser",
+    "FISC": "Fischer", "FISCHER": "Fischer",
+    "MENN": "Mennekes", "MENNEKES": "Mennekes",
+    "SPEL": "Spelsberg", "SPELSBERG": "Spelsberg",
+    "FIND": "Finder", "FINDER": "Finder",
+    "TRIL": "Trilux", "TRILUX": "Trilux",
+    "ZUMS": "Zumtobel", "ZUMTOBEL": "Zumtobel",
+    "HELL": "HellermannTyton", "HELLERMA": "HellermannTyton", "HELLERMANN": "HellermannTyton",
+    "DEHN": "Dehn",
+    "MURR": "Murrplastik", "MURRELEK": "Murrelektronik", "MURRELEKTRONIK": "Murrelektronik",
+    "HAZE": "Hazet", "HAZET": "Hazet",
+    "BOSC": "Bosch", "BOSCH": "Bosch",
+    "FRAE": "Fränkische",
+    "WALT": "Walther-Werke",
+    "TEHA": "Tehalit",
+    "SCHR": "Schrack",
+    "PROT": "Protekt",
+    "LEDV": "Ledvance", "LEDVANCE": "Ledvance",
+    "CELL": "Cellpack", "CELLPACK": "Cellpack",
+    "HART": "Harting", "HARTING": "Harting",
+    "WIEL": "Wieland", "WIELAND": "Wieland",
+    "PFLI": "Pflitsch", "PFLITSCH": "Pflitsch",
+    "HENS": "Hensel", "HENSEL": "Hensel",
+    "DOEP": "Doepke", "DOEPKE": "Doepke",
+    "BALS": "Bals", "WALTHER": "Walther-Werke",
+    "ABB": "ABB", "WAGO": "Wago", "JUNG": "Jung", "GIRA": "Gira", "BEGA": "Bega", "RZB": "RZB", "ABN": "ABN",
+}
+
+_KABEL_PRAEFIXE = ("NYM-", "NYY-", "H05", "H07", "YSLY", "J-Y(", "NHXH", "N2XH", "RG58", "RG59", "CAT")
+_EINHEIT_MUSTER = re.compile(r"^(\d+[xX]\d*|\d+(?:[.,]\d+)?(?:mm|cm|m|ml|l|g|kg|V|A|W|kW|VA|Hz|qmm|TE|pol)\b|[dhlbDHLB]=)", re.I)
+
+
+def hersteller_ableiten(
+    bez: str | None,
+    kt2: str | None = None,
+    herst_nr: str | None = None,
+    matchcode: str | None = None,
+) -> tuple[str | None, str | None]:
+    """Leitet Hersteller und Hersteller-Artikelnummer aus Datanorm-Feldern ab (Fega, Rexel, Granzow, Löffelhardt)."""
+    b = (bez or "").strip()
+    hnr = (herst_nr or "").strip() or None
+    if not b:
+        return None, hnr
+
+    teile = b.split()
+    erstes = teile[0].strip() if teile else ""
+    ober = erstes.upper()
+
+    herst = None
+    if ober in HERSTELLER_MAP:
+        herst = HERSTELLER_MAP[ober]
+    elif ober in ("KAB+LTG", "KABEL", "LWL") or ober.startswith(_KABEL_PRAEFIXE):
+        herst = None
+    elif len(erstes) >= 2 and erstes[0].isalpha() and not any(c.isdigit() for c in erstes):
+        herst = erstes[:100]
+
+    if not hnr and herst:
+        # 1. Granzow-Muster: rechtsbündige Hersteller-Nr. am Ende von Kurztext 1 nach >=2 Leerzeichen
+        m_granzow = re.search(r"\s{2,}([A-Z0-9][A-Z0-9.\-/_:,]{1,25})$", b)
+        if m_granzow:
+            hnr = m_granzow.group(1).strip()[:100]
+        # 2. Löffelhardt-Muster: 6-12 stellige Hersteller-Bestellnr. am Ende von Kurztext 2
+        if not hnr and kt2:
+            k2 = kt2.strip()
+            k2_teile = k2.split()
+            if k2_teile and re.match(r"^\d{6,12}$", k2_teile[-1]):
+                hnr = k2_teile[-1][:100]
+        # 3. 2. Wort im Kurztext 1 ist Typ/Hersteller-Artikelnr. (keine reine Maßangabe)
+        if not hnr and len(teile) >= 2 and any(c.isdigit() for c in teile[1]) and not _EINHEIT_MUSTER.match(teile[1]):
+            hnr = teile[1].strip()[:100]
+        # 4. Kurztext 2 als Einzelwort mit Ziffern
+        if not hnr and kt2:
+            k2 = kt2.strip()
+            if " " not in k2 and any(c.isdigit() for c in k2) and not _EINHEIT_MUSTER.match(k2):
+                hnr = k2[:100]
+        # 5. Matchcode als Fallback
+        if not hnr and matchcode:
+            mc = matchcode.strip()
+            if any(c.isdigit() for c in mc) and not mc.upper().startswith(ober[:4]):
+                hnr = mc[:100]
+
+    return herst, hnr
 
 
 class DatanormFehler(ValueError):
@@ -398,6 +501,16 @@ def lesen(daten: bytes, modus: str = "auto"):
 
     if not anz_a and not anz_p and not anz_b and not anz_l and not anz_s and not anz_r:
         raise DatanormFehler("In der Datei wurden keine gültigen Datanorm-Sätze (A, B, P, S oder R) gefunden.")
+
+    for a in artikel.values():
+        h_name, h_nr = hersteller_ableiten(
+            a.get("bezeichnung"),
+            a.get("kurztext2"),
+            a.get("hersteller_artnr"),
+            a.get("matchcode"),
+        )
+        a["hersteller"] = h_name
+        a["hersteller_artnr"] = h_nr
 
     ist_reine_preisdatei = (anz_p > 0 and anz_a == 0 and anz_l == 0)
     ist_reine_loeschdatei = (anz_l > 0 and anz_a == 0 and anz_p == 0)

@@ -112,7 +112,8 @@
             {% if z.kurztext2 %}<small class="sub">{{ z.kurztext2 }}</small>{% endif %}
             <div style="margin-top:.25rem;display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
               {% if z.ean %}<span class="ean-tag">EAN {{ z.ean }}</span>{% endif %}
-              {% if z.hersteller_artnr %}<small class="sub" style="display:inline">Herst. {{ z.hersteller_artnr }}</small>{% endif %}
+              {% if z.hersteller %}<small class="sub" style="display:inline"><b>{{ z.hersteller }}</b></small>{% endif %}
+              {% if z.hersteller_artnr %}<small class="sub" style="display:inline">Herst.-Nr. <b>{{ z.hersteller_artnr }}</b></small>{% endif %}
               <small class="sub" style="display:inline">· Einheit: <b>{{ z.einheit or 'Stück' }}</b></small>
             </div>
           </td>
@@ -209,6 +210,8 @@
     <tr>
       <th>Artikelnr.</th>
       <th>Bezeichnung</th>
+      <th>Hersteller</th>
+      <th>Hersteller-Art.-Nr.</th>
       <th>Einheit</th>
       <th class="r">Preis</th>
       <th>Kupfer / EAN</th>
@@ -221,8 +224,9 @@
     <td><b>{{ a.artikelnr }}</b></td>
     <td>
       {{ a.bezeichnung }}{% if a.kurztext2 %}<small class="sub">{{ a.kurztext2 }}</small>{% endif %}
-      {% if a.matchcode or a.hersteller_artnr %}<small class="sub meta">{% if a.matchcode %}{{ a.matchcode }}{% endif %}{% if a.hersteller_artnr %} · Herst. {{ a.hersteller_artnr }}{% endif %}</small>{% endif %}
     </td>
+    <td>{{ a.hersteller_anzeige or '–' }}</td>
+    <td>{{ a.hersteller_artnr_anzeige or '–' }}</td>
     <td>{{ a.einheit or '–' }}</td>
     <td class="r">
       {{ a.listenpreis|preis if a.listenpreis is not none else '–' }}

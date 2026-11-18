@@ -481,11 +481,28 @@ class Article(Base):
     kupfermerker: Mapped[int | None] = mapped_column(Integer)
     ean: Mapped[str | None] = mapped_column(String(30), index=True)
     matchcode: Mapped[str | None] = mapped_column(String(50))
-    hersteller_artnr: Mapped[str | None] = mapped_column(String(100))
+    hersteller: Mapped[str | None] = mapped_column(String(100), index=True)
+    hersteller_artnr: Mapped[str | None] = mapped_column(String(100), index=True)
     supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"), index=True)
     quelle: Mapped[str] = mapped_column(String(20), default="datanorm")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     supplier: Mapped["Supplier | None"] = relationship()
+
+    @property
+    def hersteller_anzeige(self) -> str | None:
+        if self.hersteller:
+            return self.hersteller
+        from . import datanorm
+        h, _ = datanorm.hersteller_ableiten(self.bezeichnung, self.kurztext2, self.hersteller_artnr, self.matchcode)
+        return h
+
+    @property
+    def hersteller_artnr_anzeige(self) -> str | None:
+        if self.hersteller_artnr:
+            return self.hersteller_artnr
+        from . import datanorm
+        _, hnr = datanorm.hersteller_ableiten(self.bezeichnung, self.kurztext2, self.hersteller_artnr, self.matchcode)
+        return hnr
 
 
 class SupplierInvoice(Base):

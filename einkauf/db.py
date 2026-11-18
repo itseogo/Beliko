@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from . import config
 from .models import Base, Meta, NumberRange, Order
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 
 def _spalten_ergaenzen(engine, tabelle, spalten):
@@ -101,6 +101,8 @@ def migrate(engine):
             "matchcode": "VARCHAR(50)",
             "hersteller_artnr": "VARCHAR(100)",
         })
+    if aktuell < 15:
+        _spalten_ergaenzen(engine, "articles", {"hersteller": "VARCHAR(100)"})
     if aktuell < 14:
         # Artikel je Lieferant erlauben (globales UNIQUE auf artikelnr aufheben, Indizes auf ean/artikelnr/supplier_id)
         insp = inspect(engine)

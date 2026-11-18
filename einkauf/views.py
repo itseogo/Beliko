@@ -1395,12 +1395,15 @@ def ugl_position_anlegen(oid):
     )
     if neu.artikelnr:
         vorher = (g.db.query(OrderItem)
-                  .filter(OrderItem.artikelnr == neu.artikelnr, OrderItem.preis.isnot(None))
+                  .join(Order, OrderItem.order_id == Order.id)
+                  .filter(Order.supplier_id == o.supplier_id, OrderItem.artikelnr == neu.artikelnr, OrderItem.preis.isnot(None))
                   .order_by(OrderItem.id.desc()).first())
         if vorher and vorher.preis is not None:
             neu.preis = vorher.preis
         else:
-            art = g.db.query(Article).filter(Article.artikelnr == neu.artikelnr).first()
+            art = g.db.query(Article).filter(Article.supplier_id == o.supplier_id, Article.artikelnr == neu.artikelnr).first()
+            if not art:
+                art = g.db.query(Article).filter(Article.artikelnr == neu.artikelnr).first()
             if art and art.listenpreis is not None:
                 neu.preis = art.listenpreis
 
@@ -2298,6 +2301,7 @@ def artikel():
                     Article.bezeichnung.like(like),
                     Article.kurztext2.like(like),
                     Article.ean.like(like),
+                    Article.hersteller.like(like),
                     Article.hersteller_artnr.like(like),
                     Article.matchcode.like(like),
                 )).limit(600).all()
@@ -2372,12 +2376,15 @@ def artikel():
 
             gruppen = {}
             for a in alle_art:
+                h_nr = a.hersteller_artnr_anzeige
                 if a.ean and a.ean.strip():
                     schluessel = f"EAN:{a.ean.strip()}"
-                elif a.hersteller_artnr and a.hersteller_artnr.strip():
-                    schluessel = f"HERST:{a.hersteller_artnr.strip().upper()}"
+                elif h_nr and h_nr.strip():
+                    h_name = (a.hersteller_anzeige or "").strip().upper()
+                    schluessel = f"HERST:{h_name}:{h_nr.strip().upper()}"
                 else:
-                    schluessel = f"ART:{a.artikelnr.strip().upper()}"
+                    # Eigene Artikelnummern der Großhändler nicht über verschiedene Lieferanten vermischen
+                    schluessel = f"ART:{a.supplier_id}:{a.artikelnr.strip().upper()}"
 
                 if schluessel not in gruppen:
                     gruppen[schluessel] = {"leit": a, "je_lief": {}}
@@ -2403,7 +2410,8 @@ def artikel():
                     "bezeichnung": leit.bezeichnung,
                     "kurztext2": leit.kurztext2,
                     "ean": leit.ean,
-                    "hersteller_artnr": leit.hersteller_artnr,
+                    "hersteller": leit.hersteller_anzeige,
+                    "hersteller_artnr": leit.hersteller_artnr_anzeige,
                     "einheit": leit.einheit,
                     "je_lief": je_lief,
                     "anz_treffer": anz_treffer,
@@ -2444,6 +2452,7 @@ def artikel():
             Article.bezeichnung.like(like),
             Article.kurztext2.like(like),
             Article.ean.like(like),
+            Article.hersteller.like(like),
             Article.hersteller_artnr.like(like),
             Article.matchcode.like(like),
         ))
@@ -2573,6 +2582,8 @@ def artikel_import():
                     a.ean = d["ean"]
                 if d.get("matchcode"):
                     a.matchcode = d["matchcode"]
+                if d.get("hersteller"):
+                    a.hersteller = d["hersteller"]
                 if d.get("hersteller_artnr"):
                     a.hersteller_artnr = d["hersteller_artnr"]
                 if sid:

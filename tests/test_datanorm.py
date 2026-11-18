@@ -274,9 +274,35 @@ c.post("/artikel/import", data={
     "modus": "voll",
 }, follow_redirects=True)
 
-# Materialübersicht zeigt "Vergleichen (3)" für EAN 4001869181394
+# Materialübersicht zeigt "Vergleichen (3)" sowie die Spalten Hersteller und Hersteller-Art.-Nr.
 html_liste = get("/artikel?ansicht=liste&q=4001869181394").get_data(as_text=True)
 assert "Vergleichen (3)" in html_liste
+assert "<th>Hersteller</th>" in html_liste
+assert "<th>Hersteller-Art.-Nr.</th>" in html_liste
+assert "<td>Siemens</td>" in html_liste
+assert "<td>5SY4116-7</td>" in html_liste
+
+# Test Überschneidungsschutz: Gleiche Artikelnr. "120462" bei einem anderen Lieferanten (Rexel = 2)
+# darf den Fega-Artikel "120462" (Lieferant 1) NICHT überschreiben!
+DN_GLEICHE_ARTNR_ANDERER_LIEF = (
+    "A;N;120462;00;OBO Kabelschelle 20mm;Kunststoff lichtgrau;1;0;Stck;95;4200;2\r\n"
+).encode("cp1252")
+t = tok(get("/artikel/import").get_data(as_text=True))
+c.post("/artikel/import", data={
+    "_csrf": t,
+    "datei": (io.BytesIO(DN_GLEICHE_ARTNR_ANDERER_LIEF), "datanorm.001"),
+    "supplier_id": "2",
+    "modus": "voll",
+}, follow_redirects=True)
+
+with app.app_context():
+    with app.extensions["SessionLocal"]() as s:
+        art_fega = s.query(Article).filter(Article.supplier_id == 1, Article.artikelnr == "120462").first()
+        art_rexel = s.query(Article).filter(Article.supplier_id == 2, Article.artikelnr == "120462").first()
+        assert art_fega is not None and "SIEM" in art_fega.bezeichnung
+        assert art_rexel is not None and "OBO" in art_rexel.bezeichnung
+        assert art_fega.hersteller_anzeige == "Siemens"
+        assert art_rexel.hersteller_anzeige == "OBO Bettermann"
 
 # 3-Spalten-Vergleich ohne Suchbegriff (zeigt automatisch gemeinsame EANs über alle 3 Lieferanten)
 html_vgl = get("/artikel?ansicht=vergleich&s1=1&s2=2&s3=3").get_data(as_text=True)

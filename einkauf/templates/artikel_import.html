@@ -7,10 +7,10 @@
   {{ csrf() }}
   <div class="grid2">
     <label class="f"><span>Datanorm-Datei (.001, .zip, datpreis.001)</span><input type="file" name="datei" required></label>
-    <label class="f"><span>Lieferant</span><select name="supplier_id">
-      <option value="">– keiner –</option>
-      {% for l in lieferanten %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}
-    </select></label>
+    <label class="f"><span>Lieferant</span><select name="supplier_id" {{ 'required' if lieferanten else '' }}>
+      <option value="">– bitte Lieferant wählen –</option>
+      {% for l in lieferanten %}<option value="{{ l.id }}" {{ 'selected' if lieferanten|length == 1 else '' }}>{{ l.name }}</option>{% endfor %}
+    </select><small>Jeder Lieferant führt seinen eigenen Artikelstamm (verhindert Überschneidungen bei gleichen Artikelnummern).</small></label>
   </div>
   <div class="modus-gruppe">
     <span class="modus-titel">Import-Modus</span>
