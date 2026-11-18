@@ -185,4 +185,9 @@ h_kopf = P("/bestellungen/1/kopf", {"ab_nr": "47748835", "bestellnr": "B-2026-00
 assert "AB 47748835" in h_kopf
 assert "25.11.2026" in h_kopf
 
+# Projekt-Vorgang zeigt im Block Bestellung die Spalte Status (Ware angefordert / Teilweise / Komplett)
+h_proj_v = G("/projekte?p=1&tab=vorgang")
+assert "<th>Status</th>" in h_proj_v
+assert any(st in h_proj_v for st in ("Ware angefordert", "Teilweise", "Komplett"))
+
 print("NEUE FUNKTIONEN OK")

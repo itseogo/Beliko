@@ -183,11 +183,24 @@
   {% for key, lst in gruppen.items() if lst %}
   <h4 class="gruppe" style="margin:.8rem 0 .3rem; font-size:.95rem"><span class="chip s-{{ key }}">{{ BEST_STATUS[key] }}</span> <small>{{ lst|length }}</small></h4>
   <div class="scroll"><table>
-  <thead><tr><th>Datum</th><th>Bestellnr.</th><th>Lieferant</th><th class="r">Positionen</th><th class="r">davon offen</th><th class="r">Summe (dieses Projekt)</th></tr></thead>
-  <tbody>{% for e in lst %}<tr>
+  <thead><tr><th>Datum</th><th>Bestellnr.</th><th>Lieferant</th><th>Status</th><th class="r">Positionen</th><th class="r">davon offen</th><th class="r">Summe (dieses Projekt)</th></tr></thead>
+  <tbody>{% for e in lst %}
+    {% set hat_geliefert = e.pos|selectattr('geliefert', 'gt', 0)|list|length > 0 %}
+    {% if e.o.status == 'neu' %}
+      {% set st_text = 'Neu (Entwurf)' %}{% set st_cls = 's-neu' %}
+    {% elif e.offen == 0 or e.o.status in ('komplett', 'abgeschlossen') %}
+      {% set st_text = 'Komplett' %}{% set st_cls = 's-komplett' %}
+    {% elif hat_geliefert or e.offen < (e.pos|length) or e.o.status == 'teilgeliefert' %}
+      {% set st_text = 'Teilweise' %}{% set st_cls = 's-teilgeliefert' %}
+    {% else %}
+      {% set st_text = 'Ware angefordert' %}{% set st_cls = 's-bestellt' %}
+    {% endif %}
+    <tr>
     <td>{{ e.o.bestelldatum|datum }}</td>
-    <td><a href="{{ url_for('main.bestellung_detail', oid=e.o.id, von=p.id) }}">{{ e.o.bestellnr or ('Nr. ' ~ e.o.id) }}</a></td>
-    <td>{{ e.o.supplier.name }}</td><td class="r">{{ e.pos|length }}</td><td class="r">{{ e.offen }}</td><td class="r">{{ e.summe|money }}</td></tr>{% endfor %}</tbody></table></div>
+    <td><a href="{{ url_for('main.bestellung_detail', oid=e.o.id, von=p.id) }}">{{ e.o.bestellnr or ('Nr. ' ~ e.o.id) }}</a>{% if e.o.ab_nr %}<small class="sub">AB {{ e.o.ab_nr }}</small>{% endif %}</td>
+    <td>{{ e.o.supplier.name }}</td>
+    <td><span class="chip {{ st_cls }}">{{ st_text }}</span></td>
+    <td class="r">{{ e.pos|length }}</td><td class="r">{{ e.offen }}</td><td class="r">{{ e.summe|money }}</td></tr>{% endfor %}</tbody></table></div>
   {% endfor %}
   {% else %}
   <p class="leer" style="padding:.8rem; margin:0">Für dieses Projekt gibt es noch keine Bestellungen.{% if g.user.role != 'leser' %} <a href="{{ url_for('main.bestellung_neu', p=p.id) }}">Jetzt anlegen</a>.{% endif %}</p>
