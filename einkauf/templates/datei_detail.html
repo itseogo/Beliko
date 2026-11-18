@@ -1,10 +1,14 @@
 {% extends 'base.html' %}{% from '_m.html' import csrf with context %}{% block title %}{{ f.name }}{% endblock %}
 {% block content %}
 <p class="krumen"><a href="{{ url_for('main.dateien') }}">← Zurück zu den Lieferantendateien</a></p>
-<div class="kopf"><div><h1>{{ f.name }}</h1>
-  <p class="meta">{{ f.supplier.name }} · abgerufen am {{ f.abgerufen_am.strftime('%d.%m.%Y %H:%M') }} · {{ f.groesse }} Byte · <span class="chip {{ 'bald' if f.status == 'neu' else ('ueberfaellig' if f.status == 'fehler' else 'ok') }}">{{ DATEI_STATUS[f.status] }}</span></p></div></div>
+<div class="kopf">
+  <div>
+    <h1>{{ f.name }}</h1>
+    <p class="meta">{{ f.supplier.name }} · abgerufen am {{ f.abgerufen_am.strftime('%d.%m.%Y %H:%M') }} · {{ f.groesse }} Byte · <span class="chip {{ 'bald' if f.status == 'neu' else ('ueberfaellig' if f.status == 'fehler' else 'ok') }}">{{ DATEI_STATUS[f.status] }}</span></p>
+  </div>
+</div>
 {% if f.hinweis %}<div class="flash warn">{{ f.hinweis }}</div>{% endif %}
-{% if f.status == 'verarbeitet' and f.bestell_id %}<div class="flash ok">Verarbeitet am {{ f.verarbeitet_am.strftime('%d.%m.%Y %H:%M') if f.verarbeitet_am }}: {{ 'als Lieferschein gebucht' if f.aktion == 'lieferschein' else 'als Auftragsbestätigung vermerkt' }} in <a href="{{ url_for('main.bestellung_detail', oid=f.bestell_id) }}">Bestellung {{ f.bestell_id }}</a>.</div>{% endif %}
+{% if f.status == 'verarbeitet' and f.bestell_id %}<div class="flash ok">Verarbeitet am {{ f.verarbeitet_am.strftime('%d.%m.%Y %H:%M') if f.verarbeitet_am }}: {{ 'als Lieferschein gebucht' if f.aktion == 'lieferschein' else 'als Auftragsbestätigung (AB) zugewiesen' }} in <a href="{{ url_for('main.bestellung_detail', oid=f.bestell_id) }}">Bestellung {{ f.bestell_id }}</a>.</div>{% endif %}
 
 {% if r %}
 <div class="panel"><table class="kv">
@@ -14,20 +18,69 @@
 <div class="scroll"><table><thead><tr><th>Pos.</th><th>Artikelnr.</th><th>Bezeichnung</th><th class="r">Menge</th></tr></thead><tbody>
 {% for p in r.positionen %}<tr><td>{{ p.pos }}</td><td>{{ p.artikelnr }}</td><td>{{ p.text1 }}<small class="sub">{{ p.text2 }}</small></td><td class="r">{{ p.menge|qty }} {{ p.einheit }}</td></tr>{% endfor %}</tbody></table></div>
 
-{% if f.status in ('neu', 'ignoriert') and g.user.role != 'leser' %}
+{% if g.user.role != 'leser' %}
 <h2>Zu welcher Bestellung gehört die Datei?</h2>
+
 {% if kandidaten %}
 <form method="post" action="{{ url_for('main.datei_pruefen', fid=f.id) }}" class="panel">{{ csrf() }}
-  <p class="meta">Vorschlag nach gleichen Artikelnummern in noch offenen Positionen. Danach siehst du wie gewohnt eine Vorschau, gebucht wird erst nach deiner Bestätigung.</p>
-  {% for k in kandidaten %}<label class="check"><input type="radio" name="bestellung" value="{{ k.o.id }}" {{ 'checked' if loop.first }}>
-    <span><b>{{ k.o.bestellnr or ('Nr. ' ~ k.o.id) }}</b> vom {{ k.o.bestelldatum|datum }} · Status {{ BEST_KURZ[k.o.status] }}
-      {% if k.ab_match %}<span class="chip ok" style="margin-left:.25rem">⭐ Auftrags-Nr. passt{% if k.lieferung_sfx %} (Lieferung {{ k.lieferung_sfx }}){% endif %}</span>
-      {% elif k.bestellnr_match %}<span class="chip ok" style="margin-left:.25rem">⭐ Bestellnummer im Dateinamen</span>{% endif %}
-      · {{ k.treffer }} von {{ k.gesamt }} Positionen der Datei passen zu offenen Positionen{% if k.o.ab_nr %} · AB {{ k.o.ab_nr }}{% endif %}
-    </span></label>{% endfor %}
-  <div class="actions"><button class="btn">Mit dieser Bestellung prüfen</button></div>
+  <h3 style="margin-top:0">Automatisch erkannte Vorschläge</h3>
+  <p class="meta">Vorschlag nach Auftragsnummer, Bestellnummer oder gleichen Artikelnummern in offenen Positionen. In der Vorschau kannst du Positionen hinzufügen und als Lieferschein (Wareneingang) oder Auftragsbestätigung (AB) buchen.</p>
+  <div class="modus-liste" style="margin-bottom:1rem">
+    {% for k in kandidaten %}
+    {% set proj_namen = k.o.items|map(attribute='project')|select|unique|list %}
+    <label class="modus-karte">
+      <input type="radio" name="bestellung" value="{{ k.o.id }}" {{ 'checked' if loop.first }}>
+      <div class="modus-text">
+        <b>
+          {{ k.o.bestellnr or ('Nr. ' ~ k.o.id) }} vom {{ k.o.bestelldatum|datum }} · Status {{ BEST_KURZ[k.o.status] }}
+          {% if proj_namen %} · {% for pr in proj_namen %}{{ pr.nummer }}{% if pr.name %} ({{ pr.name }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
+          {% if k.ab_match %}<span class="chip ok" style="margin-left:.25rem">⭐ Auftrags-Nr. passt{% if k.lieferung_sfx %} (Lieferung {{ k.lieferung_sfx }}){% endif %}</span>
+          {% elif k.bestellnr_match %}<span class="chip ok" style="margin-left:.25rem">⭐ Bestellnummer im Dateinamen</span>{% endif %}
+        </b>
+        <span>{{ k.treffer }} von {{ k.gesamt }} Positionen der Datei passen zu offenen Positionen{% if k.o.ab_nr %} · AB {{ k.o.ab_nr }}{% endif %}</span>
+      </div>
+    </label>
+    {% endfor %}
+  </div>
+  <div class="actions" style="margin-bottom:0">
+    <button class="btn">📦 Mit dieser Bestellung prüfen (Einlieferung / AB)</button>
+    <button class="btn sek" name="direkt_ab" value="1" title="Weist diese Datei und ihre Auftragsnummer direkt als Auftragsbestätigung (AB) der gewählten Bestellung zu">📋 Direkt als Auftragsbestätigung (AB) zuweisen</button>
+  </div>
 </form>
-{% else %}<p class="leer">Keine Bestellung dieses Lieferanten hat offene Positionen mit diesen Artikelnummern. Prüfe, ob die Bestellung schon erfasst ist und die Artikelnummern des Lieferanten trägt.</p>{% endif %}
+{% endif %}
+
+{% if alle_bestellungen %}
+<form method="post" action="{{ url_for('main.datei_pruefen', fid=f.id) }}" class="panel">{{ csrf() }}
+  <h3 style="margin-top:0">{% if kandidaten %}Oder einer anderen Bestellung von {{ f.supplier.name }} zuweisen{% else %}Bestellung von {{ f.supplier.name }} auswählen &amp; Lieferdaten / AB zuweisen{% endif %}</h3>
+  {% if not kandidaten %}
+    <p class="meta">Keine offene Bestellposition trug exakt diese Artikelnummer (z. B. wenn der Lieferant eine Zusatz-/Ersatzposition liefert oder noch keine AB-Nummer in der Bestellung steht). Du kannst die Datei hier trotzdem jeder Bestellung von <b>{{ f.supplier.name }}</b> als <b>Einlieferung / Lieferschein</b> oder als <b>Auftragsbestätigung (AB)</b> zuweisen:</p>
+  {% else %}
+    <p class="meta">Wähle hier manuell eine beliebige Bestellung dieses Lieferanten aus, um die Lieferdaten oder die Auftragsbestätigung (AB) zuzuweisen:</p>
+  {% endif %}
+  <div class="leiste" style="align-items:flex-end">
+    <label class="f" style="flex:1;min-width:20rem">
+      <span>Bestellung von {{ f.supplier.name }}</span>
+      <select name="bestellung_manuell" required>
+        <option value="">– Bestellung auswählen –</option>
+        {% for o in alle_bestellungen %}
+          {% set proj_namen = o.items|map(attribute='project')|select|unique|list %}
+          {% set offene_anz = o.items|rejectattr('storniert')|selectattr('rest', 'gt', 0)|list|length %}
+          <option value="{{ o.id }}" {{ 'selected' if (f.bestell_id == o.id) or (not kandidaten and loop.first) }}>
+            {{ o.bestellnr or ('Nr. ' ~ o.id) }} · {{ o.bestelldatum|datum }}
+            {% if proj_namen %} · {% for pr in proj_namen %}{{ pr.nummer }}{% if pr.name %} {{ pr.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
+            {% if o.ab_nr %} · AB {{ o.ab_nr }}{% endif %}
+            · {{ BEST_KURZ[o.status] }} ({{ offene_anz }} von {{ o.items|length }} Pos. offen)
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn">📦 Bestellung zuweisen &amp; prüfen (Einlieferung / AB)</button>
+    <button class="btn sek" name="direkt_ab" value="1" title="Weist die Auftragsnummer und Bestätigungsdaten dieser Datei direkt als AB der gewählten Bestellung zu">📋 Direkt als AB zuweisen</button>
+  </div>
+</form>
+{% elif not kandidaten %}
+<p class="leer">Für {{ f.supplier.name }} ist aktuell noch keine Bestellung erfasst. Lege zuerst eine Bestellung an (oder übernimm sie per IDS), um diese Datei zuzuweisen.</p>
+{% endif %}
 {% endif %}
 {% endif %}
 

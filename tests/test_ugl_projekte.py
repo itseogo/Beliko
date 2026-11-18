@@ -171,4 +171,18 @@ assert r_ugl["kopf"]["lieferung_suffix"] == "01"
 assert r_ugl["kopf"]["lieferung_nr"] == 1
 assert r_ugl["kopf"]["ist_lieferschein"] is True
 
+# Auf /dateien/<fid> muss die Datei auch manuell jeder Bestellung zugewiesen werden können (als Lieferung oder direkt als AB):
+h_dd = G(f"/dateien/{sf_id}")
+assert "bestellung_manuell" in h_dd
+assert "Direkt als AB zuweisen" in h_dd
+
+h_ab_dir = P(f"/dateien/{sf_id}/pruefen", {"bestellung_manuell": "1", "direkt_ab": "1"}, page=f"/dateien/{sf_id}")
+assert "Auftragsbestätigung" in h_ab_dir
+assert "47558164" in h_ab_dir
+
+# AB-Nr. & Liefertermin direkt auf der Bestellseite bearbeiten (/bestellungen/1/kopf)
+h_kopf = P("/bestellungen/1/kopf", {"ab_nr": "47748835", "bestellnr": "B-2026-0001", "wunschtermin": "2026-11-25", "termin_auf_pos": "1"}, page="/bestellungen/1")
+assert "AB 47748835" in h_kopf
+assert "25.11.2026" in h_kopf
+
 print("NEUE FUNKTIONEN OK")

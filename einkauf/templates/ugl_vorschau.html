@@ -76,6 +76,8 @@
   <div class="grid4">
     {{ field('Lieferschein-Nr. (nur bei Wareneingang)', 'lieferschein_nr', r.kopf.belegnr) }}
     {{ field('Lieferdatum (nur bei Wareneingang)', 'datum', (r.datei.datum or heute).isoformat(), type='date') }}
+    {{ field('Auftrags- / AB-Nr. des Lieferanten', 'ab_nr', r.kopf.auftragsnr or o.ab_nr or r.kopf.belegnr, hint='Wird an der Bestellung hinterlegt') }}
+    {{ field('Bestätigter Liefertermin (optional bei AB)', 'ab_liefertermin', o.wunschtermin.isoformat() if o.wunschtermin else '', type='date') }}
   </div>
   {% if r.kopf.ist_lieferschein and r.kopf.lieferung_suffix %}
   <p class="meta" style="color:var(--text);font-size:.9rem"><b>Fega-Lieferschein erkannt:</b> Belegnummer <b>{{ r.kopf.belegnr }}</b> entspricht Auftrag <b>{{ r.kopf.auftragsnr }}</b> (Teillieferung <b>{{ r.kopf.lieferung_suffix }}</b>). Beim Buchen wird dieser Wareneingang mit der Lieferscheinnummer übernommen und die Auftragsnummer der Bestellung zugeordnet.</p>
@@ -85,8 +87,8 @@
   <p class="meta">Prüfe die Belegart (Datei sagt „{{ r.kopf.belegart or '?' }}“, Kennung {{ r.datei.kennung or '?' }}). Bei Wareneingang als Lieferschein buchen.</p>
   {% endif %}
   <div class="actions">
-    <button class="btn {{ '' if r.kopf.ist_lieferschein or r.kopf.belegart != 'AB' else 'sek' }}" name="aktion" value="lieferschein" onclick="return confirm('Die ausgewählten Mengen als Wareneingang buchen?')">Als Lieferschein buchen (Wareneingang)</button>
-    <button class="btn {{ 'sek' if r.kopf.ist_lieferschein or r.kopf.belegart != 'AB' else '' }}" name="aktion" value="ab">Als Auftragsbestätigung vermerken (nichts buchen)</button>
+    <button class="btn {{ '' if r.kopf.ist_lieferschein or r.kopf.belegart != 'AB' else 'sek' }}" name="aktion" value="lieferschein" onclick="return confirm('Die ausgewählten Mengen als Wareneingang buchen?')">📦 Als Lieferschein buchen (Wareneingang)</button>
+    <button class="btn {{ 'sek' if r.kopf.ist_lieferschein or r.kopf.belegart != 'AB' else '' }}" name="aktion" value="ab">📋 Als Auftragsbestätigung (AB) vermerken (nichts buchen)</button>
   </div>
 </div>
 </form>

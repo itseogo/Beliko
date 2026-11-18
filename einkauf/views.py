@@ -834,13 +834,67 @@ def bestellung_detail(oid):
     ))
     vorauswahl_datei_id = next((f.id for f in abgerufene_dateien if getattr(f, "ist_passend", False) and f.status == "neu"), None)
     ftp_abrufbar = bool(o.supplier and o.supplier.active and not lieferantendateien.pruefen(o.supplier))
+    zugeordnete_dateien = [f for f in abgerufene_dateien if f.bestell_id == o.id]
 
     return render_template("bestellung_detail.html", o=o, projekte=aktive_projekte(), von_projekt=von_projekt,
                            offene=[i for i in o.items if not i.storniert and i.rest > 0],
                            abgerufene_dateien=abgerufene_dateien,
+                           zugeordnete_dateien=zugeordnete_dateien,
                            vorauswahl_datei_id=vorauswahl_datei_id,
                            ftp_abrufbar=ftp_abrufbar,
                            DATEI_STATUS=DATEI_STATUS)
+
+
+def _datei_direkt_als_ab_zuweisen(o, f):
+    raw = lieferantendateien.inhalt(f)
+    r = ugl.lesen(raw)
+    zeilen, _ = ugl.abgleichen(r["positionen"], o.items)
+    ds = formate.datum(r["kopf"].get("datum") or r["datei"].get("datum") or date.today())
+    ab_neu = r["kopf"].get("auftragsnr") or r["kopf"].get("belegnr") or f.belegnr
+    if ab_neu:
+        o.ab_nr = ab_neu[:100]
+    ab_label = f"AB {ab_neu}" if ab_neu else "AB"
+    bestaetigt_anz = 0
+    for z in zeilen:
+        for item, menge in z["zuordnung"]:
+            bestaetigt_anz += 1
+            if menge >= item.menge:
+                item.hinweis = f"Vom Lieferanten bestätigt ({ab_label} vom {ds})"
+            else:
+                item.hinweis = f"Bestätigt: {_qty_text(menge)} von {_qty_text(item.menge)} ({ab_label} vom {ds})"
+    f.status, f.bestell_id, f.aktion = "verarbeitet", o.id, "ab"
+    f.verarbeitet_am = datetime.now()
+    protokoll("ab_zuweisen", "bestellung", o.id, f"Datei {f.name} als {ab_label} zugewiesen")
+    g.db.commit()
+    flash(
+        f"Auftragsbestätigung ({ab_label}, Datei {f.name}) wurde der Bestellung {o.bestellnr or f'Nr. {o.id}'} zugewiesen"
+        + (f" ({bestaetigt_anz} Positionen bestätigt)." if bestaetigt_anz else "."),
+        "ok",
+    )
+
+
+@main.route("/bestellungen/<int:oid>/kopf", methods=["POST"])
+@edit_required
+def bestellung_kopf(oid):
+    o = _bestellung(oid)
+    ab_nr = (request.form.get("ab_nr") or "").strip()[:100] or None
+    bestellnr = (request.form.get("bestellnr") or "").strip()[:100] or None
+    wunschtermin = parse_date(request.form.get("wunschtermin"))
+    notiz = (request.form.get("notiz") or "").strip()[:1000] or None
+    termin_auf_pos = request.form.get("termin_auf_pos") == "1"
+
+    o.ab_nr = ab_nr
+    o.bestellnr = bestellnr
+    o.wunschtermin = wunschtermin
+    o.notiz = notiz
+    if termin_auf_pos and wunschtermin:
+        for i in o.items:
+            if not i.storniert and i.rest > 0:
+                i.erw_lieferdatum = wunschtermin
+    protokoll("aendern", "bestellung", o.id, f"Bestelldaten/AB aktualisiert (AB: {o.ab_nr or '–'})")
+    g.db.commit()
+    flash(f"Auftragsbestätigung / Bestelldaten gespeichert (AB-Nr.: {o.ab_nr or 'keine'}).", "ok")
+    return redirect(url_for("main.bestellung_detail", oid=o.id))
 
 
 @main.route("/bestellungen/<int:oid>/datei-zuordnen", methods=["POST"])
@@ -849,13 +903,16 @@ def bestellung_datei_zuordnen(oid):
     o = _bestellung(oid)
     fid = request.form.get("datei_id", type=int)
     if not fid:
-        flash("Bitte einen abgerufenen Lieferschein auswählen.", "fehler")
+        flash("Bitte eine abgerufene Lieferantendatei auswählen.", "fehler")
         return redirect(url_for("main.bestellung_detail", oid=oid))
     f = g.db.get(SupplierFile, fid) or abort(404)
     if f.supplier_id != o.supplier_id:
         flash("Die Datei gehört zu einem anderen Lieferanten als diese Bestellung.", "fehler")
         return redirect(url_for("main.bestellung_detail", oid=oid))
     try:
+        if request.form.get("direkt_ab") == "1":
+            _datei_direkt_als_ab_zuweisen(o, f)
+            return redirect(url_for("main.bestellung_detail", oid=oid))
         return _ugl_vorschau(o, lieferantendateien.inhalt(f), f.name, datei_id=f.id)
     except (ugl.UglFehler, lieferantendateien.AbrufFehler, OSError) as e:
         flash(f"Die Datei kann nicht gelesen werden: {e}", "fehler")
@@ -1322,13 +1379,25 @@ def ugl_uebernehmen(oid):
         o.status_aktualisieren()
         ls_nr = d.lieferschein_nr or ""
         basis, sfx, _ = ugl.fega_zerlegen(ls_nr)
-        if not o.ab_nr and basis:
+        ab_nr_form = (request.form.get("ab_nr") or "").strip()[:100]
+        if ab_nr_form:
+            o.ab_nr = ab_nr_form
+        elif not o.ab_nr and basis:
             o.ab_nr = basis
         lief_info = f", Lieferschein {ls_nr}" + (f" / Teillieferung {sfx} zu Auftrag {basis}" if (sfx and basis) else "")
         flash(f"Wareneingang gebucht ({len(d.items)} Buchungen{lief_info}). Status: {BEST_STATUS[o.status]}.", "ok")
     elif aktion == "ab":
+        ab_nr_form = (request.form.get("ab_nr") or "").strip()[:100]
+        ab_neu = ab_nr_form or r["kopf"].get("belegnr") or r["kopf"].get("auftragsnr")
+        if ab_neu and (ab_nr_form or not o.ab_nr):
+            o.ab_nr = ab_neu[:100]
+        ab_termin = parse_date(request.form.get("ab_liefertermin"))
+        if ab_termin:
+            o.wunschtermin = ab_termin
         for z in zeilen:
             for item, menge in z["zuordnung"]:
+                if ab_termin and not item.storniert and item.rest > 0:
+                    item.erw_lieferdatum = ab_termin
                 if menge >= item.menge:
                     item.hinweis = f"Vom Lieferanten bestätigt ({ds})"
                 else:
@@ -1336,8 +1405,6 @@ def ugl_uebernehmen(oid):
         if vermerken:
             for i in fehlend:
                 i.hinweis = f"In Bestätigung vom {ds} nicht enthalten (nicht lieferbar oder Rückstand)"
-        if not o.ab_nr and r["kopf"].get("belegnr"):
-            o.ab_nr = r["kopf"]["belegnr"]
         flash("Bestätigung vermerkt. Es wurde nichts als geliefert gebucht.", "ok")
     else:
         abort(400)
@@ -2865,14 +2932,29 @@ def datei_detail(fid):
         r, kandidaten = _bestell_kandidaten(f, lieferantendateien.inhalt(f))
     except (ugl.UglFehler, lieferantendateien.AbrufFehler, OSError) as e:
         flash(f"Die Datei kann nicht gelesen werden: {e}", "fehler")
-    return render_template("datei_detail.html", f=f, r=r, kandidaten=kandidaten, DATEI_STATUS=DATEI_STATUS)
+
+    alle_bestellungen = (
+        g.db.query(Order)
+        .options(selectinload(Order.items).joinedload(OrderItem.project), selectinload(Order.items).selectinload(OrderItem.delivery_items))
+        .filter(Order.supplier_id == f.supplier_id, Order.status.in_(("neu", "bestellt", "teilgeliefert", "komplett")))
+        .order_by(Order.bestelldatum.desc(), Order.id.desc())
+        .all()
+    )
+    return render_template(
+        "datei_detail.html",
+        f=f,
+        r=r,
+        kandidaten=kandidaten,
+        alle_bestellungen=alle_bestellungen,
+        DATEI_STATUS=DATEI_STATUS,
+    )
 
 
 @main.route("/dateien/<int:fid>/pruefen", methods=["POST"])
 @edit_required
 def datei_pruefen(fid):
     f = g.db.get(SupplierFile, fid) or abort(404)
-    oid = request.form.get("bestellung", type=int)
+    oid = request.form.get("bestellung", type=int) or request.form.get("bestellung_manuell", type=int)
     if not oid:
         flash("Bitte eine Bestellung wählen.", "fehler")
         return redirect(url_for("main.datei_detail", fid=fid))
@@ -2881,6 +2963,9 @@ def datei_pruefen(fid):
         flash("Die Datei gehört zu einem anderen Lieferanten als die gewählte Bestellung.", "fehler")
         return redirect(url_for("main.datei_detail", fid=fid))
     try:
+        if request.form.get("direkt_ab") == "1":
+            _datei_direkt_als_ab_zuweisen(o, f)
+            return redirect(url_for("main.bestellung_detail", oid=o.id))
         return _ugl_vorschau(o, lieferantendateien.inhalt(f), f.name, datei_id=f.id)
     except (ugl.UglFehler, lieferantendateien.AbrufFehler, OSError) as e:
         flash(f"Die Datei kann nicht gelesen werden: {e}", "fehler")

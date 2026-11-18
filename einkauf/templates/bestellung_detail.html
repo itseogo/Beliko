@@ -37,6 +37,43 @@
 {% if o.status == 'neu' %}<div class="flash warn">Diese Bestellung steht noch auf „Neu“. Ihre Positionen erscheinen erst im Rückstand und in den Projektsummen, wenn du sie als bestellt markierst.</div>{% endif %}
 {% if o.notiz %}<p>{{ o.notiz }}</p>{% endif %}
 
+{% set ab_dateien = (zugeordnete_dateien or [])|selectattr('aktion', 'equalto', 'ab')|list %}
+<div class="panel" style="padding:.85rem 1rem;margin:.5rem 0 1rem;background:var(--head-bg)">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.75rem">
+    <div>
+      <b>Auftragsbestätigung (AB):</b>
+      {% if o.ab_nr %}
+        <span class="chip ok" style="font-size:.88rem;margin-left:.35rem">📋 AB {{ o.ab_nr }}</span>
+      {% else %}
+        <span class="meta" style="margin-left:.35rem">Noch keine AB zugewiesen <small>(optional – eine IDS-Übertragung ist noch keine AB; Lieferungen können auch ohne AB gebucht werden)</small></span>
+      {% endif %}
+      {% if ab_dateien %}
+        <span class="meta" style="margin-left:.5rem">· AB-Datei:
+          {% for af in ab_dateien %}<a href="{{ url_for('main.datei_detail', fid=af.id) }}"><b>{{ af.name }}</b></a>{% if af.datei_datum %} ({{ af.datei_datum|datum }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+        </span>
+      {% endif %}
+    </div>
+  </div>
+  {% if bearbeiten %}
+  <details style="margin-top:.5rem">
+    <summary style="cursor:pointer;font-weight:600;color:var(--blue);font-size:.9rem">✏️ AB-Nr., Liefertermin oder Bestellnummer zuweisen / bearbeiten</summary>
+    <form method="post" action="{{ url_for('main.bestellung_kopf', oid=o.id) }}" style="margin-top:.75rem">
+      {{ csrf() }}
+      <div class="grid4">
+        {{ field('AB-Nr. / Auftragsnr. Lieferant', 'ab_nr', o.ab_nr or '', hint='z. B. 47748835 (verknüpft Teillieferungen 01, 02 …)') }}
+        {{ field('Bestellnummer', 'bestellnr', o.bestellnr or '') }}
+        {{ field('Bestätigter Liefertermin / Wunschtermin', 'wunschtermin', o.wunschtermin.isoformat() if o.wunschtermin else '', type='date') }}
+        {{ field('Notiz', 'notiz', o.notiz or '') }}
+      </div>
+      <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+        <label class="check" style="margin:0"><input type="checkbox" name="termin_auf_pos" value="1"> <span>Liefertermin auch für alle offenen Positionen übernehmen</span></label>
+        <button class="btn sek klein">AB / Bestelldaten speichern</button>
+      </div>
+    </form>
+  </details>
+  {% endif %}
+</div>
+
 <h2 id="positionen">Positionen</h2>
 {% if o.items %}
 <div class="scroll"><table>
@@ -149,6 +186,7 @@
         {% endfor %}
       </select>
       <button class="btn">Lieferschein zuordnen &amp; prüfen</button>
+      <button class="btn sek" name="direkt_ab" value="1" title="Weist die gewählte Datei und ihre Auftragsnummer direkt als Auftragsbestätigung (AB) dieser Bestellung zu">📋 Direkt als AB zuweisen</button>
     </form>
   </div>
   {% elif ftp_abrufbar %}
