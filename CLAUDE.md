@@ -300,6 +300,13 @@ Echte Dateien des Lieferanten nicht ins Paket legen; `tests/make_ugl.py` baut ei
     - **Kupferfelder im Artikelstamm:** Speichert Kupferbasis (z. B. 150 €/100kg), Kupfergewicht/Cu-Zahl (z. B. 16,8 kg Cu pro 100m) und Kupfermerker (1=100m, 2=1000m, 3=1 Stk) sowie EAN, Matchcode und Hersteller-Teilenummer.
     - **Reine Preis-Datanorm (Preispflege):** Neue Import-Option unter `/artikel/import` ermöglicht das Einspielen von reinen Preispflege-Dateien (`DATPREIS`, Satzart P). Aktualisiert nur die Listenpreise bereits vorhandener Artikel, ohne Artikeltexte zu verändern oder Fremdartikel anzulegen.
     - **Artikelübersicht (`/artikel`):** Zeigt Kupferdaten (`Cu: 16,8 kg / 100m (Basis 150 €)`), EAN, Hersteller-Teilenummer und Preiseinheiten transparent an.
+  - **Lieferschein-Detailansicht (`/lieferscheine/<id>`):**
+    - Klick auf die Lieferscheinnummer (z. B. `4755816402`) in der Positionstabelle der Bestellung (unter „Lieferschein & Lieferdatum“) oder unter „Bisherige Lieferungen“ öffnet direkt die neue Lieferschein-Detailseite.
+    - Zeigt alle Daten des Lieferscheins: Belegnummer, Teillieferung (z. B. `Lfg. 02`), Lieferdatum, Lieferant, verlinkte Bestellung und Notiz.
+    - Zugehörige UGL-Lieferantendatei (falls vorhanden) wird mit direktem Link zur UGL-Vorschau angezeigt.
+    - Liste aller in diesem Lieferschein gelieferten Positionen (Artikel, Projekt, gelieferte Menge, bestellte Menge und Status).
+    - Sicherheitsfunktion: Lieferschein kann mit Bestätigung gelöscht/storniert werden (gelieferte Mengen werden in der Bestellung automatisch wieder als offen gebucht).
+    - Auch in der Übersicht aller Lieferscheine (`/lieferscheine`) sind die Belegnummern nun direkt zur Detailansicht verlinkt.
   - **Tabellarische Positionserfassung in der Bestelldetailansicht (`/bestellungen/<id>`):**
     - Umbau des bisherigen zweizeiligen Kachel-Formulars („Position hinzufügen“ mit `grid4`) in eine kompakte, übersichtliche Zeilentabelle (`table.zeilen`).
     - Spalten: `Artikelnr.`, `Bezeichnung *`, `Menge *`, `Einheit`, `Einzelpreis netto`, `Voraussichtlich`, `Projekt`, `Kommission`.

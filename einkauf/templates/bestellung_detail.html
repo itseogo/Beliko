@@ -89,7 +89,11 @@
       {% for di in i.delivery_items %}
         {% set sfx = di.delivery.lieferschein_nr[-2:] if di.delivery.lieferschein_nr and di.delivery.lieferschein_nr|length >= 8 and di.delivery.lieferschein_nr[-2:].isdigit() else None %}
         <div{% if not loop.first %} style="margin-top:.35rem;padding-top:.25rem;border-top:1px dashed var(--line)"{% endif %}>
-          {% if di.delivery.lieferschein_nr %}<span>{{ di.delivery.lieferschein_nr }}</span>{% if sfx %} <span class="chip" style="font-size:.7rem;padding:.05rem .3rem">Lfg. {{ sfx }}</span>{% endif %}{% else %}<span class="meta">ohne Nr.</span>{% endif %}
+          {% if di.delivery.lieferschein_nr %}
+            <a href="{{ url_for('main.lieferschein_detail', did=di.delivery.id) }}" title="Lieferschein anzeigen" style="font-weight:600">{{ di.delivery.lieferschein_nr }}</a>{% if sfx %} <span class="chip" style="font-size:.7rem;padding:.05rem .3rem">Lfg. {{ sfx }}</span>{% endif %}
+          {% else %}
+            <a href="{{ url_for('main.lieferschein_detail', did=di.delivery.id) }}" class="meta" title="Lieferschein anzeigen">ohne Nr.</a>
+          {% endif %}
           {% if di.delivery.datum %}<small class="sub">{{ di.delivery.datum|datum }}</small>{% endif %}
           {% if i.delivery_items|length > 1 %}<small class="meta">({{ di.menge|qty }} {{ i.einheit or '' }})</small>{% endif %}
         </div>
@@ -340,7 +344,7 @@ function lieferscheinFiltern(q) {
 <h2>Bisherige Lieferungen</h2>
 {% for d in o.deliveries|reverse %}
 {% set sfx = d.lieferschein_nr[-2:] if d.lieferschein_nr and d.lieferschein_nr|length >= 8 and d.lieferschein_nr[-2:].isdigit() else None %}
-<div class="lieferung"><b>{{ d.datum|datum }}</b>{% if d.lieferschein_nr %} · Lieferschein {{ d.lieferschein_nr }}{% if sfx %} <span class="chip" style="font-size:.72rem;padding:.05rem .35rem">Teillieferung {{ sfx }}</span>{% endif %}{% endif %}
+<div class="lieferung"><b>{{ d.datum|datum }}</b> · <a href="{{ url_for('main.lieferschein_detail', did=d.id) }}"><b>Lieferschein {{ d.lieferschein_nr or ('#' ~ d.id) }}</b></a>{% if sfx %} <span class="chip" style="font-size:.72rem;padding:.05rem .35rem">Teillieferung {{ sfx }}</span>{% endif %}
 <ul>{% for di in d.items %}<li>{{ di.menge|qty }} × {{ di.item.bezeichnung }}</li>{% endfor %}</ul></div>
 {% endfor %}
 {% endif %}

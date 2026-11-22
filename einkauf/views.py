@@ -2091,6 +2091,68 @@ def lieferschein_neu():
                            form=request.form if request.method == "POST" else {})
 
 
+@main.route("/lieferscheine/<int:did>")
+@login_required
+def lieferschein_detail(did):
+    d = (g.db.query(Delivery)
+         .options(
+             joinedload(Delivery.order).joinedload(Order.supplier),
+             selectinload(Delivery.items).joinedload(DeliveryItem.item).joinedload(OrderItem.project)
+         )
+         .filter(Delivery.id == did).first() or abort(404))
+
+    # Prüfen, ob eine passende Lieferantendatei (UGL) vorliegt
+    sf = None
+    if d.lieferschein_nr and d.order and d.order.supplier_id:
+        sf = (g.db.query(SupplierFile)
+              .filter(SupplierFile.supplier_id == d.order.supplier_id,
+                      or_(SupplierFile.belegnr == d.lieferschein_nr,
+                          SupplierFile.name.like(f"%{d.lieferschein_nr}%")))
+              .first())
+    if not sf and d.order_id:
+        sf = (g.db.query(SupplierFile)
+              .filter(SupplierFile.bestell_id == d.order_id,
+                      SupplierFile.aktion == "lieferschein")
+              .first())
+
+    sfx = None
+    if d.lieferschein_nr and len(d.lieferschein_nr) >= 8 and d.lieferschein_nr[-2:].isdigit():
+        sfx = d.lieferschein_nr[-2:]
+
+    return render_template("lieferschein_detail.html", d=d, sf=sf, sfx=sfx)
+
+
+@main.route("/lieferscheine/<int:did>/loeschen", methods=["POST"])
+@edit_required
+def lieferschein_loeschen(did):
+    d = g.db.get(Delivery, did) or abort(404)
+    oid = d.order_id
+    nr = d.lieferschein_nr or f"Nr. {d.id}"
+
+    # Verknüpfte Lieferantendatei ggf. zurücksetzen
+    if d.lieferschein_nr and d.order:
+        for sf in g.db.query(SupplierFile).filter(
+            SupplierFile.supplier_id == d.order.supplier_id,
+            SupplierFile.bestell_id == oid,
+            SupplierFile.belegnr == d.lieferschein_nr
+        ).all():
+            sf.status = "neu"
+            sf.aktion = None
+            sf.verarbeitet_am = None
+
+    g.db.delete(d)
+    g.db.flush()
+    if oid:
+        o = g.db.get(Order, oid)
+        if o:
+            o.status_aktualisieren()
+    g.db.commit()
+    flash(f"Lieferschein {nr} gelöscht und gelieferte Mengen zurückgesetzt.", "ok")
+    if oid:
+        return redirect(url_for("main.bestellung_detail", oid=oid))
+    return redirect(url_for("main.lieferscheine"))
+
+
 # -------------------------------------------------------- Lexoffice (Einstellungen)
 LEX_OPTIONEN = [  # (Schlüssel, Titel, umgesetzt, Standard)
     ("lex_sync_kunden", "Kontakte: Kunden", True, True),
