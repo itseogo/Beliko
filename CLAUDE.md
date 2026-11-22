@@ -4,7 +4,7 @@ Diese Datei gehört zum Projekt und wird bei **jeder Änderung** mit aktualisier
 damit in einem neuen Chat nahtlos weitergearbeitet werden kann). In einem neuen Chat: `beliko.zip`
 hochladen (enthält diese Datei) und sagen „lies die CLAUDE.md und mach weiter“.
 
-**Stand: Version 1.3.1 · Datenbank-Schemaversion 15**
+**Stand: Version 1.3.2 · Datenbank-Schemaversion 16**
 
 **Name:** Der Auftraggeber nennt das Tool **BeLiKo** (BestellLieferKontrolle). Sichtbar überall als BeLiKo; intern bleiben Paket `einkauf`, Ordner `einkauf-data` und der Dienstname `einkauf` (damit bestehende Installationen weiterlaufen). Auslieferung: `beliko.zip`.
 
@@ -281,6 +281,15 @@ Echte Dateien des Lieferanten nicht ins Paket legen; `tests/make_ugl.py` baut ei
 - Spalten in bestehenden Datenbanken nur über `_spalten_ergaenzen` nachziehen (siehe Abschnitt 4).
 
 ## 10. Versionsverlauf
+- **1.3.2**
+  - **Performance-Optimierung Artikelstamm & 3-Spalten-Lieferantenvergleich (Schema 16):**
+    - **Flaschenhals behoben:** Die Suche im Lieferantenvergleich (und in der Materialübersicht) dauerte bei ~1 Million Artikeln zuvor 20–30 Sekunden, obwohl der Raspberry Pi 5 kaum CPU-Last zeigte (I/O-Warten durch unindizierte Full Table Scans auf MariaDB). Nach der Optimierung antwortet die Suche in wenigen Millisekunden (< 50 ms).
+    - **Datenbank-Indizes (Schema 16):** Ergänzung von B-Tree-Indizes für `hersteller_artnr` und `hersteller` sowie zusammengesetzten Indizes `(supplier_id, ean)`, `(supplier_id, hersteller_artnr)` und `(supplier_id, artikelnr)` in `einkauf/models.py` und `einkauf/db.py`.
+    - **Optimierung der Vergleichs-Abfragen:**
+      - Schnelle Präfix-Suche auf indizierten Spalten (`hersteller_artnr`, `artikelnr`, `ean`, `hersteller`) mit automatischem Fallback auf Teilstring-Suche, falls keine Treffer gefunden werden.
+      - Auflösung des bisherigen langsamen `OR`-Filters über gefundene IDs, EANs und Herstellernummern: Statt eines Full Table Scans erfolgen gezielte, hochoptimierte Index-Lookups je EAN und Herstellernummer für die anderen Lieferanten, die in Python zusammengeführt werden.
+    - **In-Memory-Zähler-Cache:** TTL-Cache für Artikelanzahlen je Lieferant (5 Minuten Gültigkeit, automatische Invalidierung beim Datanorm-Import), wodurch die teure `GROUP BY supplier_id`-Zählung über 1 Million Zeilen bei jedem Seitenaufruf entfällt.
+    - **Optimierter List-Count:** In der Materialübersicht (`/artikel?ansicht=liste`) wird ohne aktiven Filter die gecachte Gesamtanzahl genutzt, anstatt bei jedem Aufruf `COUNT(*)` über die gesamte Tabelle auszuführen.
 - **1.3.1**
   - **Lieferantendateien & Auftragsbestätigung (AB) frei zuweisen (`/dateien/<id>` & `/bestellungen/<id>`):**
     - **Manuelle Bestellauswahl & Zuweisen-Buttons auf `/dateien/<id>`:** Selbst wenn in einer abgerufenen Lieferantendatei keine offene Bestellposition exakt dieselbe Artikelnummer trägt (z. B. bei Zusatz-/Ersatzartikeln oder fehlender AB-Nr. nach einer IDS-Übertragung), bietet `/dateien/<id>` nun immer ein Auswahlmenü aller Bestellungen des Lieferanten (mit Bestellnr., Datum, Projektname, Status und offenen Positionen) sowie zwei direkte Zuweisen-Buttons: **„📦 Bestellung zuweisen & prüfen (Einlieferung / AB)“** und **„📋 Direkt als AB zuweisen“**. Auch in der Dateiliste (`/dateien`) hat jede Zeile direkt einen Button „Zuweisen / Prüfen“.

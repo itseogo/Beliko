@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from . import config
 from .models import Base, Meta, NumberRange, Order
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 
 def _spalten_ergaenzen(engine, tabelle, spalten):
@@ -103,6 +103,24 @@ def migrate(engine):
         })
     if aktuell < 15:
         _spalten_ergaenzen(engine, "articles", {"hersteller": "VARCHAR(100)"})
+    if aktuell < 16:
+        # Performance-Indizes für Artikelstamm & Lieferanten-Vergleich (hersteller, hersteller_artnr, zusammengesetzte Indizes)
+        insp = inspect(engine)
+        vorhandene_ix = {ix["name"] for ix in insp.get_indexes("articles")}
+        neue_indizes = [
+            ("ix_articles_hersteller_artnr", "articles (hersteller_artnr)"),
+            ("ix_articles_hersteller", "articles (hersteller)"),
+            ("ix_articles_sup_ean", "articles (supplier_id, ean)"),
+            ("ix_articles_sup_herstartnr", "articles (supplier_id, hersteller_artnr)"),
+            ("ix_articles_sup_artnr", "articles (supplier_id, artikelnr)"),
+        ]
+        with engine.begin() as conn:
+            for ix_name, ix_def in neue_indizes:
+                if ix_name not in vorhandene_ix:
+                    try:
+                        conn.execute(text(f"CREATE INDEX {ix_name} ON {ix_def}"))
+                    except Exception:
+                        pass
     if aktuell < 14:
         # Artikel je Lieferant erlauben (globales UNIQUE auf artikelnr aufheben, Indizes auf ean/artikelnr/supplier_id)
         insp = inspect(engine)

@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -468,6 +468,11 @@ class AuditLog(Base):
 class Article(Base):
     """Artikelstamm (z. B. aus Datanorm-Import, je Lieferant)."""
     __tablename__ = "articles"
+    __table_args__ = (
+        Index("ix_articles_sup_ean", "supplier_id", "ean"),
+        Index("ix_articles_sup_herstartnr", "supplier_id", "hersteller_artnr"),
+        Index("ix_articles_sup_artnr", "supplier_id", "artikelnr"),
+    )
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     artikelnr: Mapped[str] = mapped_column(String(100), index=True)
     bezeichnung: Mapped[str] = mapped_column(String(300))

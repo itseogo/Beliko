@@ -2439,6 +2439,28 @@ def sperre_ping(obj_typ, obj_id):
     return jsonify({"ok": ok})
 
 
+_ARTIKEL_ANZ_CACHE = {"zeit": 0.0, "daten": {}}
+_ARTIKEL_ANZ_TTL = 300.0  # 5 Minuten Cache-Gültigkeit
+
+
+def artikel_anzahl_cache_leeren():
+    """Leert den Zwischenspeicher für Artikelanzahlen je Lieferant."""
+    global _ARTIKEL_ANZ_CACHE
+    _ARTIKEL_ANZ_CACHE = {"zeit": 0.0, "daten": {}}
+
+
+def _artikel_anzahl_je_lieferant(db):
+    """Gibt die Artikelanzahl je Lieferant zurück (gecached für max. 5 Minuten)."""
+    global _ARTIKEL_ANZ_CACHE
+    now = time.time()
+    if _ARTIKEL_ANZ_CACHE["daten"] and (now - _ARTIKEL_ANZ_CACHE["zeit"] < _ARTIKEL_ANZ_TTL):
+        return dict(_ARTIKEL_ANZ_CACHE["daten"])
+    rows = db.query(Article.supplier_id, func.count(Article.id)).group_by(Article.supplier_id).all()
+    daten = dict(rows)
+    _ARTIKEL_ANZ_CACHE = {"zeit": now, "daten": daten}
+    return dict(daten)
+
+
 @main.route("/artikel")
 @login_required
 def artikel():
@@ -2450,11 +2472,7 @@ def artikel():
     nur_kupfer = request.args.get("nur_kupfer") == "1"
 
     lieferanten = g.db.query(Supplier).order_by(Supplier.name).all()
-    anz_je_lief = dict(
-        g.db.query(Article.supplier_id, func.count(Article.id))
-        .group_by(Article.supplier_id)
-        .all()
-    )
+    anz_je_lief = _artikel_anzahl_je_lieferant(g.db)
     gesamt = sum(anz_je_lief.values())
 
     if ansicht == "vergleich":
@@ -2490,39 +2508,63 @@ def artikel():
                 basis_q = basis_q.filter(or_(Article.kupfergewicht.isnot(None), Article.kupferbasis.isnot(None)))
 
             if suche:
-                like = f"%{suche}%"
-                direkt_treffer = basis_q.filter(or_(
-                    Article.artikelnr.like(like),
-                    Article.bezeichnung.like(like),
-                    Article.kurztext2.like(like),
-                    Article.ean.like(like),
-                    Article.hersteller.like(like),
-                    Article.hersteller_artnr.like(like),
-                    Article.matchcode.like(like),
-                )).limit(600).all()
+                suche_clean = suche.strip()
+                prefix = f"{suche_clean}%"
+                like = f"%{suche_clean}%"
+
+                # 1. Schnelle indizierte Suche (Präfix auf Art.-Nr., Herst.-Artnr., EAN, Hersteller)
+                # Einzelne Abfragen für maximale Index-Ausnutzung (MySQL/MariaDB B-Tree Index Range Scan)
+                direkt_treffer = []
+                direkt_ids = set()
+
+                for col in (Article.hersteller_artnr, Article.artikelnr, Article.ean, Article.hersteller):
+                    treffer_col = basis_q.filter(col.like(prefix)).limit(300).all()
+                    for a in treffer_col:
+                        if a.id not in direkt_ids:
+                            direkt_ids.add(a.id)
+                            direkt_treffer.append(a)
+
+                # Falls noch keine Treffer: Teilstring-Suche (LIKE %...%) auf Bezeichnung, Kurztext, Matchcode
+                if not direkt_treffer:
+                    treffer_sub = basis_q.filter(or_(
+                        Article.bezeichnung.like(like),
+                        Article.kurztext2.like(like),
+                        Article.matchcode.like(like),
+                    )).limit(300).all()
+                    for a in treffer_sub:
+                        if a.id not in direkt_ids:
+                            direkt_ids.add(a.id)
+                            direkt_treffer.append(a)
 
                 gef_eans = {a.ean.strip() for a in direkt_treffer if a.ean and a.ean.strip()}
                 gef_herst = {a.hersteller_artnr.strip() for a in direkt_treffer if a.hersteller_artnr and a.hersteller_artnr.strip()}
-                gef_ids = {a.id for a in direkt_treffer}
 
-                filter_teile = []
-                if gef_ids:
-                    filter_teile.append(Article.id.in_(gef_ids))
+                alle_art_dict = {a.id: a for a in direkt_treffer}
+
+                # 2. Übereinstimmende Artikel der anderen Lieferanten gezielt per Index nachladen
                 if gef_eans:
-                    filter_teile.append(Article.ean.in_(gef_eans))
-                if gef_herst:
-                    filter_teile.append(Article.hersteller_artnr.in_(gef_herst))
-
-                if filter_teile:
-                    alle_art = (
+                    q_ean = (
                         g.db.query(Article)
                         .options(joinedload(Article.supplier))
-                        .filter(Article.supplier_id.in_(spalten_ids), or_(*filter_teile))
-                        .limit(1500)
-                        .all()
+                        .filter(Article.supplier_id.in_(spalten_ids), Article.ean.in_(list(gef_eans)))
                     )
-                else:
-                    alle_art = []
+                    if nur_kupfer:
+                        q_ean = q_ean.filter(or_(Article.kupfergewicht.isnot(None), Article.kupferbasis.isnot(None)))
+                    for a in q_ean.limit(1000).all():
+                        alle_art_dict[a.id] = a
+
+                if gef_herst:
+                    q_herst = (
+                        g.db.query(Article)
+                        .options(joinedload(Article.supplier))
+                        .filter(Article.supplier_id.in_(spalten_ids), Article.hersteller_artnr.in_(list(gef_herst)))
+                    )
+                    if nur_kupfer:
+                        q_herst = q_herst.filter(or_(Article.kupfergewicht.isnot(None), Article.kupferbasis.isnot(None)))
+                    for a in q_herst.limit(1000).all():
+                        alle_art_dict[a.id] = a
+
+                alle_art = list(alle_art_dict.values())
             else:
                 if nur_gemeinsame and len(spalten_ids) >= 2:
                     gem_eans = [
@@ -2557,17 +2599,17 @@ def artikel():
                 else:
                     erste_art = basis_q.order_by(Article.artikelnr).limit(300).all()
                     gef_eans = {a.ean.strip() for a in erste_art if a.ean and a.ean.strip()}
-                    gef_ids = {a.id for a in erste_art}
-                    filter_teile = [Article.id.in_(gef_ids)] if gef_ids else []
+                    alle_art_dict = {a.id: a for a in erste_art}
                     if gef_eans:
-                        filter_teile.append(Article.ean.in_(gef_eans))
-                    alle_art = (
-                        g.db.query(Article)
-                        .options(joinedload(Article.supplier))
-                        .filter(Article.supplier_id.in_(spalten_ids), or_(*filter_teile))
-                        .limit(900)
-                        .all()
-                    ) if filter_teile else []
+                        for a in (
+                            g.db.query(Article)
+                            .options(joinedload(Article.supplier))
+                            .filter(Article.supplier_id.in_(spalten_ids), Article.ean.in_(list(gef_eans)))
+                            .limit(900)
+                            .all()
+                        ):
+                            alle_art_dict[a.id] = a
+                    alle_art = list(alle_art_dict.values())
 
             gruppen = {}
             for a in alle_art:
@@ -2640,19 +2682,43 @@ def artikel():
         q = q.filter(Article.supplier_id == lief_id)
     if nur_kupfer:
         q = q.filter(or_(Article.kupfergewicht.isnot(None), Article.kupferbasis.isnot(None)))
-    if suche:
-        like = f"%{suche}%"
-        q = q.filter(or_(
-            Article.artikelnr.like(like),
-            Article.bezeichnung.like(like),
-            Article.kurztext2.like(like),
-            Article.ean.like(like),
-            Article.hersteller.like(like),
-            Article.hersteller_artnr.like(like),
-            Article.matchcode.like(like),
+
+    if not suche and not nur_kupfer:
+        # Kein Full-Table-Count über ~1 Mio. Zeilen nötig: Anzahl ist gecached
+        treffer_anz = anz_je_lief.get(lief_id, gesamt) if lief_id else gesamt
+        artikel_liste = q.order_by(Article.artikelnr).limit(500).all()
+    elif suche:
+        suche_clean = suche.strip()
+        prefix = f"{suche_clean}%"
+        like = f"%{suche_clean}%"
+
+        # Schnelle Treffer über indizierte Spalten per Präfix (artikelnr, hersteller_artnr, ean, hersteller)
+        q_fast = q.filter(or_(
+            Article.artikelnr.like(prefix),
+            Article.hersteller_artnr.like(prefix),
+            Article.ean.like(prefix),
+            Article.hersteller.like(prefix),
         ))
-    treffer_anz = q.count()
-    artikel_liste = q.order_by(Article.artikelnr).limit(500).all()
+        fast_treffer = q_fast.order_by(Article.artikelnr).limit(500).all()
+
+        if len(fast_treffer) >= 50 or (fast_treffer and len(suche_clean) >= 4):
+            artikel_liste = fast_treffer
+            treffer_anz = len(fast_treffer) if len(fast_treffer) < 500 else q_fast.count()
+        else:
+            q_full = q.filter(or_(
+                Article.artikelnr.like(like),
+                Article.bezeichnung.like(like),
+                Article.kurztext2.like(like),
+                Article.ean.like(like),
+                Article.hersteller.like(like),
+                Article.hersteller_artnr.like(like),
+                Article.matchcode.like(like),
+            ))
+            treffer_anz = q_full.count()
+            artikel_liste = q_full.order_by(Article.artikelnr).limit(500).all()
+    else:
+        treffer_anz = q.count()
+        artikel_liste = q.order_by(Article.artikelnr).limit(500).all()
 
     eans_auf_seite = {a.ean for a in artikel_liste if a.ean}
     ean_lief_anz = {}
@@ -2712,6 +2778,7 @@ def artikel_import():
                 g.db.delete(a)
             if loesch_kand:
                 g.db.commit()
+                artikel_anzahl_cache_leeren()
             protokoll("import", "artikel", details=f"Datanorm Löschpflege: {len(loesch_kand)} Artikel entfernt")
             flash(f"Datanorm-Löschpflege fertig: {len(loesch_kand)} Artikel aus dem Stamm gelöscht ({len(r.get('loeschungen', []))} in Datei gemeldet).", "ok")
             return redirect(url_for("main.artikel"))
@@ -2746,6 +2813,7 @@ def artikel_import():
                     uebersprungen += 1
             protokoll("import", "artikel", details=f"Datanorm Preispflege: {akt} Preise aktualisiert, {uebersprungen} übersprungen")
             g.db.commit()
+            artikel_anzahl_cache_leeren()
             flash(f"Datanorm-Preispflege fertig: {akt} Preise aktualisiert"
                   + (f" ({uebersprungen} Artikel nicht im Stamm übersprungen)" if uebersprungen else "") + ".", "ok")
             return redirect(url_for("main.artikel"))
@@ -2795,6 +2863,7 @@ def artikel_import():
 
             protokoll("import", "artikel", details=f"Datanorm: {neu} neu, {akt} aktualisiert" + (f", {geloescht} gelöscht" if geloescht else ""))
             g.db.commit()
+            artikel_anzahl_cache_leeren()
             flash(f"Datanorm-Import fertig: {neu} neue Artikel, {akt} aktualisiert" + (f", {geloescht} gelöschte Artikel bereinigt" if geloescht else "") + ".", "ok")
             return redirect(url_for("main.artikel"))
 
