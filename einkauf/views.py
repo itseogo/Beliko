@@ -391,6 +391,12 @@ def rueckstand():
 
 
 # ---------------------------------------------------------------- Projekte
+def _nat_key(s):
+    if s is None:
+        return []
+    return [int(text) if text.isdigit() else text.casefold() for text in re.split(r'(\d+)', str(s))]
+
+
 @main.route("/projekte")
 @login_required
 def projekte():
@@ -402,6 +408,12 @@ def projekte():
         tab = "vorgang"
     if tab not in ("uebersicht", "vorgang", "material"):
         tab = "vorgang"
+    sort = request.args.get("sort", "nr")
+    sort_dir = request.args.get("dir", "asc").lower()
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "asc"
+    if sort not in ("nr", "name", "kunde", "status", "offen", "bestellt", "budget"):
+        sort = "nr"
     q = g.db.query(Project).options(
         selectinload(Project.items).selectinload(OrderItem.delivery_items),
         selectinload(Project.items).joinedload(OrderItem.order),
@@ -413,7 +425,43 @@ def projekte():
     if suche:
         like = f"%{suche}%"
         q = q.filter(or_(Project.nummer.like(like), Project.name.like(like), Project.kunde.like(like)))
-    liste = q.order_by(Project.nummer).all()
+    liste = q.all()
+
+    summen_cache = {proj.id: projekt_summen(proj) for proj in liste}
+    reverse = (sort_dir == "desc")
+
+    if sort == "nr":
+        liste.sort(key=lambda proj: _nat_key(proj.nummer), reverse=reverse)
+    elif sort == "name":
+        liste.sort(key=lambda proj: (_nat_key(proj.name), _nat_key(proj.nummer)), reverse=reverse)
+    elif sort == "kunde":
+        if not reverse:
+            liste.sort(key=lambda proj: (1 if not proj.kunde else 0, _nat_key(proj.kunde), _nat_key(proj.nummer)))
+        else:
+            liste.sort(key=lambda proj: (0 if not proj.kunde else 1, _nat_key(proj.kunde), _nat_key(proj.nummer)), reverse=True)
+    elif sort == "status":
+        liste.sort(key=lambda proj: (STATUS.get(proj.status, proj.status or "").casefold(), _nat_key(proj.nummer)), reverse=reverse)
+    elif sort == "offen":
+        liste.sort(key=lambda proj: (summen_cache[proj.id]["offen"], _nat_key(proj.nummer)), reverse=reverse)
+    elif sort == "bestellt":
+        liste.sort(key=lambda proj: (summen_cache[proj.id]["bestellt"], _nat_key(proj.nummer)), reverse=reverse)
+    elif sort == "budget":
+        if not reverse:
+            liste.sort(key=lambda proj: (1 if summen_cache[proj.id]["budget"] is None else 0, summen_cache[proj.id]["budget"] or Decimal(0), _nat_key(proj.nummer)))
+        else:
+            liste.sort(key=lambda proj: (0 if summen_cache[proj.id]["budget"] is None else 1, summen_cache[proj.id]["budget"] or Decimal(0), _nat_key(proj.nummer)), reverse=True)
+
+    def sort_url(col):
+        next_dir = "desc" if (sort == col and sort_dir == "asc") else "asc"
+        params = {"status": status}
+        if suche:
+            params["q"] = suche
+        if sel:
+            params["p"] = sel
+            params["tab"] = tab
+        params["sort"] = col
+        params["dir"] = next_dir
+        return url_for("main.projekte", **params)
 
     p, gruppen, items, belege_frei, belege_frei_angebote, belege_frei_rechnungen = None, {}, [], [], [], []
     if sel:
@@ -444,6 +492,7 @@ def projekte():
     return render_template("projekte.html", projekte=liste, status=status, suche=suche, p=p, tab=tab,
                            gruppen=gruppen, items=items, belege_frei=belege_frei,
                            belege_frei_angebote=belege_frei_angebote, belege_frei_rechnungen=belege_frei_rechnungen,
+                           sort=sort, sort_dir=sort_dir, sort_url=sort_url, summen_cache=summen_cache,
                            STATUS=STATUS, BELEG_TYPEN=BELEG_TYPEN, BELEG_STATUS=BELEG_STATUS, BUDGET_MODI=BUDGET_MODI)
 
 

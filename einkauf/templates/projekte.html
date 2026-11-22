@@ -5,6 +5,8 @@
 
 <form method="get" class="leiste">
   {% if p %}<input type="hidden" name="p" value="{{ p.id }}"><input type="hidden" name="tab" value="{{ tab }}">{% endif %}
+  <input type="hidden" name="sort" value="{{ sort }}">
+  <input type="hidden" name="dir" value="{{ sort_dir }}">
   <label class="f"><span>Suchen</span><input name="q" value="{{ suche }}" placeholder="Nummer, Name oder Kunde"></label>
   <label class="f"><span>Anzeigen</span><select name="status" onchange="this.form.submit()">
     <option value="laufend" {{ 'selected' if status == 'laufend' }}>Laufende Projekte</option>
@@ -16,12 +18,64 @@
 <div class="liste-oben scroll">
 {% if projekte %}
 <table class="wahl">
-<thead><tr><th>Nr.</th><th>Name</th><th>Kunde</th><th>Status</th><th class="r">Offen</th><th class="r">Bestellt</th><th class="r">Materialbudget</th><th></th></tr></thead>
+<thead><tr>
+  <th class="sortierbar {{ 'sort-aktiv' if sort == 'nr' }}" data-col="nr" data-type="text">
+    <a href="{{ sort_url('nr') }}" title="Nach Projektnummer sortieren">
+      <span>Nr.</span>
+      <span class="sort-icon">{% if sort == 'nr' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</span>
+    </a>
+  </th>
+  <th class="sortierbar {{ 'sort-aktiv' if sort == 'name' }}" data-col="name" data-type="text">
+    <a href="{{ sort_url('name') }}" title="Nach Name sortieren (A–Z / Z–A)">
+      <span>Name</span>
+      <span class="sort-icon">{% if sort == 'name' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</span>
+    </a>
+  </th>
+  <th class="sortierbar {{ 'sort-aktiv' if sort == 'kunde' }}" data-col="kunde" data-type="text">
+    <a href="{{ sort_url('kunde') }}" title="Nach Kunde sortieren (A–Z / Z–A)">
+      <span>Kunde</span>
+      <span class="sort-icon">{% if sort == 'kunde' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</span>
+    </a>
+  </th>
+  <th class="sortierbar {{ 'sort-aktiv' if sort == 'status' }}" data-col="status" data-type="text">
+    <a href="{{ sort_url('status') }}" title="Nach Status sortieren">
+      <span>Status</span>
+      <span class="sort-icon">{% if sort == 'status' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</span>
+    </a>
+  </th>
+  <th class="r sortierbar {{ 'sort-aktiv' if sort == 'offen' }}" data-col="offen" data-type="num">
+    <a href="{{ sort_url('offen') }}" title="Nach offenen Positionen sortieren">
+      <span>Offen</span>
+      <span class="sort-icon">{% if sort == 'offen' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</span>
+    </a>
+  </th>
+  <th class="r sortierbar {{ 'sort-aktiv' if sort == 'bestellt' }}" data-col="bestellt" data-type="num">
+    <a href="{{ sort_url('bestellt') }}" title="Nach Bestellsumme sortieren">
+      <span>Bestellt</span>
+      <span class="sort-icon">{% if sort == 'bestellt' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</span>
+    </a>
+  </th>
+  <th class="r sortierbar {{ 'sort-aktiv' if sort == 'budget' }}" data-col="budget" data-type="num">
+    <a href="{{ sort_url('budget') }}" title="Nach Materialbudget sortieren">
+      <span>Materialbudget</span>
+      <span class="sort-icon">{% if sort == 'budget' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% endif %}</span>
+    </a>
+  </th>
+  <th></th>
+</tr></thead>
 <tbody>
-{% for q in projekte %}{% set s = summen(q) %}
-<tr class="{{ 'sel' if p and p.id == q.id }}" onclick="location.href='{{ url_for('main.projekte', p=q.id, tab=tab, status=status, q=suche or None) }}#unten'">
+{% for q in projekte %}{% set s = (summen_cache.get(q.id) if summen_cache else None) or summen(q) %}
+<tr class="{{ 'sel' if p and p.id == q.id }}"
+    data-nr="{{ q.nummer }}"
+    data-name="{{ q.name }}"
+    data-kunde="{{ q.kunde or '' }}"
+    data-status="{{ STATUS[q.status] }}"
+    data-offen="{{ s.offen }}"
+    data-bestellt="{{ s.bestellt }}"
+    data-budget="{{ s.budget if s.budget is not none else '' }}"
+    onclick="location.href='{{ url_for('main.projekte', p=q.id, tab=tab, status=status, q=suche or None, sort=sort, dir=sort_dir) }}#unten'">
   <td>{{ q.nummer }}</td>
-  <td><a href="{{ url_for('main.projekte', p=q.id, tab=tab, status=status, q=suche or None) }}#unten">{{ q.name }}</a></td>
+  <td><a href="{{ url_for('main.projekte', p=q.id, tab=tab, status=status, q=suche or None, sort=sort, dir=sort_dir) }}#unten">{{ q.name }}</a></td>
   <td>{{ q.kunde or '' }}</td><td>{{ STATUS[q.status] }}</td>
   <td class="r">{{ s.offen }}</td><td class="r">{{ s.bestellt|money }}</td>
   <td class="r">{% if s.budget is not none %}{{ s.budget|money }}{% if s.prozent is not none %} <span class="chip {{ 'ueberfaellig' if s.prozent > 100 else ('bald' if s.prozent >= 80 else 'ok') }}">{{ s.prozent }} %</span>{% endif %}{% else %}–{% endif %}</td>
@@ -82,7 +136,7 @@
   {% endif %}</div>
 <div class="tabs">
   {% for k, t in [('vorgang', 'Vorgang'), ('material', 'Material'), ('uebersicht', 'Übersicht')] %}
-  <a class="{{ 'on' if tab == k or (k == 'vorgang' and tab in ['bestellungen', 'lexoffice']) }}" href="{{ url_for('main.projekte', p=p.id, tab=k, status=status, q=suche or None) }}#unten">{{ t }}</a>{% endfor %}
+  <a class="{{ 'on' if tab == k or (k == 'vorgang' and tab in ['bestellungen', 'lexoffice']) }}" href="{{ url_for('main.projekte', p=p.id, tab=k, status=status, q=suche or None, sort=sort, dir=sort_dir) }}#unten">{{ t }}</a>{% endfor %}
 </div>
 
 {% if tab == 'uebersicht' %}
@@ -93,7 +147,7 @@
   <div class="kpi"><b>{{ s.offen }}</b><span>offene Positionen</span></div>
 </div>
 {% if s.modus != 'manuell' %}<p class="meta">Budget-Modus: <b>{{ BUDGET_MODI[s.modus] }}</b>{% if s.modus == 'faktor' %} (Faktor {{ (p.budget_faktor or 1)|qty }}){% endif %} · Warensumme aus {{ s.angebote_n }} Angebot(en): {{ s.warensumme|money }}.</p>{% endif %}
-{% if s.unklar_pos %}<div class="flash warn">{{ s.unklar_pos }} Angebotsposition(en) haben noch keine Kostenart („unklar“) und fehlen deshalb in der Warensumme. <a href="{{ url_for('main.projekte', p=p.id, tab='vorgang', status=status, q=suche or None) }}#unten">Jetzt zuordnen</a></div>{% endif %}
+{% if s.unklar_pos %}<div class="flash warn">{{ s.unklar_pos }} Angebotsposition(en) haben noch keine Kostenart („unklar“) und fehlen deshalb in der Warensumme. <a href="{{ url_for('main.projekte', p=p.id, tab='vorgang', status=status, q=suche or None, sort=sort, dir=sort_dir) }}#unten">Jetzt zuordnen</a></div>{% endif %}
 {% if s.prozent is not none %}<div class="balken"><i class="{{ 'rot' if s.prozent > 100 else ('gelb' if s.prozent >= 80 else '') }}" style="width: {{ [s.prozent, 100]|min }}%"></i></div>{% endif %}
 {% if s.ohne_preis %}<div class="flash warn">{{ s.ohne_preis }} Positionen haben keinen Preis und fehlen deshalb in der Summe.</div>{% endif %}
 {% if s.entwurf %}<div class="flash warn">{{ s.entwurf }} Positionen stehen in Bestellungen mit Status „Neu“ und sind in den Summen noch nicht enthalten.</div>{% endif %}
@@ -259,5 +313,106 @@
 <p class="leer">Wähle oben ein Projekt aus. Hier erscheinen dann seine Bestellungen, das Material und die Übersicht.</p>
 {% endif %}
 </section>
-<script>var s=document.querySelector('.liste-oben tr.sel'); if(s){s.scrollIntoView({block:'nearest'});}</script>
+<script>
+var s=document.querySelector('.liste-oben tr.sel'); if(s){s.scrollIntoView({block:'nearest'});}
+(function() {
+  var table = document.querySelector(".liste-oben table.wahl");
+  if (!table) return;
+  var headers = table.querySelectorAll("th.sortierbar");
+  var tbody = table.querySelector("tbody");
+  if (!headers.length || !tbody) return;
+
+  function natCompare(a, b) {
+    return (a || "").localeCompare(b || "", undefined, { numeric: true, sensitivity: "base" });
+  }
+
+  headers.forEach(function(th) {
+    th.addEventListener("click", function(e) {
+      e.preventDefault();
+      var col = th.dataset.col;
+      var type = th.dataset.type;
+      var isCurrent = th.classList.contains("sort-aktiv");
+      var currentIcon = th.querySelector(".sort-icon");
+      var currentDir = isCurrent ? ((currentIcon && currentIcon.textContent.trim() === "▼") ? "desc" : "asc") : null;
+      var nextDir = (isCurrent && currentDir === "asc") ? "desc" : "asc";
+
+      // Alle Spaltenköpfe zurücksetzen
+      headers.forEach(function(h) {
+        h.classList.remove("sort-aktiv");
+        var icon = h.querySelector(".sort-icon");
+        if (icon) icon.textContent = "";
+      });
+
+      th.classList.add("sort-aktiv");
+      if (currentIcon) currentIcon.textContent = (nextDir === "asc" ? "▲" : "▼");
+
+      var rows = Array.from(tbody.querySelectorAll("tr"));
+      rows.sort(function(rowA, rowB) {
+        var valA = rowA.dataset[col] || "";
+        var valB = rowB.dataset[col] || "";
+
+        if (type === "num") {
+          var numA = (valA === "") ? (nextDir === "asc" ? Infinity : -Infinity) : parseFloat(valA);
+          var numB = (valB === "") ? (nextDir === "asc" ? Infinity : -Infinity) : parseFloat(valB);
+          if (isNaN(numA)) numA = 0;
+          if (isNaN(numB)) numB = 0;
+          var res = numA - numB;
+          if (res !== 0) return nextDir === "asc" ? res : -res;
+          return natCompare(rowA.dataset.nr, rowB.dataset.nr);
+        } else {
+          if (!valA && valB) return 1;
+          if (valA && !valB) return -1;
+          var res = natCompare(valA, valB);
+          if (res !== 0) return nextDir === "asc" ? res : -res;
+          return natCompare(rowA.dataset.nr, rowB.dataset.nr);
+        }
+      });
+
+      rows.forEach(function(row) {
+        tbody.appendChild(row);
+      });
+
+      // URL-Parameter anpassen
+      var url = new URL(window.location.href);
+      url.searchParams.set("sort", col);
+      url.searchParams.set("dir", nextDir);
+      window.history.replaceState(null, "", url.toString());
+
+      // Filter-Formular anpassen
+      var formSort = document.querySelector('form.leiste input[name="sort"]');
+      var formDir = document.querySelector('form.leiste input[name="dir"]');
+      if (formSort) formSort.value = col;
+      if (formDir) formDir.value = nextDir;
+
+      // Href-Attribute der Spaltenköpfe für den nächsten Klick anpassen
+      headers.forEach(function(h) {
+        var c = h.dataset.col;
+        var link = h.querySelector("a");
+        if (link) {
+          var hUrl = new URL(link.href, window.location.origin);
+          hUrl.searchParams.set("sort", c);
+          hUrl.searchParams.set("dir", (c === col && nextDir === "asc") ? "desc" : "asc");
+          link.href = hUrl.pathname + hUrl.search + hUrl.hash;
+        }
+      });
+
+      // Zeilen-Links anpassen
+      rows.forEach(function(row) {
+        var onclickAttr = row.getAttribute("onclick");
+        if (onclickAttr && (onclickAttr.indexOf("projekte") !== -1 || onclickAttr.indexOf("location.href") !== -1)) {
+          var m = onclickAttr.match(/location\.href=['"]([^'"]+)['"]/);
+          if (m) {
+            var rowUrl = new URL(m[1], window.location.origin);
+            rowUrl.searchParams.set("sort", col);
+            rowUrl.searchParams.set("dir", nextDir);
+            row.setAttribute("onclick", "location.href='" + rowUrl.pathname + rowUrl.search + rowUrl.hash + "'");
+            var a = row.querySelector("td:nth-child(2) a");
+            if (a) a.href = rowUrl.pathname + rowUrl.search + rowUrl.hash;
+          }
+        }
+      });
+    });
+  });
+})();
+</script>
 {% endblock %}
