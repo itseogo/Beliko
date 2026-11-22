@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from . import config
 from .models import Base, Meta, NumberRange, Order
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 
 def _spalten_ergaenzen(engine, tabelle, spalten):
@@ -103,6 +103,8 @@ def migrate(engine):
         })
     if aktuell < 15:
         _spalten_ergaenzen(engine, "articles", {"hersteller": "VARCHAR(100)"})
+    if aktuell < 17:
+        _spalten_ergaenzen(engine, "articles", {"ekpreis": "DECIMAL(12,4)"})
     if aktuell < 16:
         # Performance-Indizes für Artikelstamm & Lieferanten-Vergleich (hersteller, hersteller_artnr, zusammengesetzte Indizes)
         insp = inspect(engine)

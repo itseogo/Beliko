@@ -4,7 +4,7 @@ Diese Datei gehört zum Projekt und wird bei **jeder Änderung** mit aktualisier
 damit in einem neuen Chat nahtlos weitergearbeitet werden kann). In einem neuen Chat: `beliko.zip`
 hochladen (enthält diese Datei) und sagen „lies die CLAUDE.md und mach weiter“.
 
-**Stand: Version 1.3.2 · Datenbank-Schemaversion 16**
+**Stand: Version 1.3.3 · Datenbank-Schemaversion 17**
 
 **Name:** Der Auftraggeber nennt das Tool **BeLiKo** (BestellLieferKontrolle). Sichtbar überall als BeLiKo; intern bleiben Paket `einkauf`, Ordner `einkauf-data` und der Dienstname `einkauf` (damit bestehende Installationen weiterlaufen). Auslieferung: `beliko.zip`.
 
@@ -281,6 +281,14 @@ Echte Dateien des Lieferanten nicht ins Paket legen; `tests/make_ugl.py` baut ei
 - Spalten in bestehenden Datenbanken nur über `_spalten_ergaenzen` nachziehen (siehe Abschnitt 4).
 
 ## 10. Versionsverlauf
+- **1.3.3**
+  - **„Mein Preis“ (Kunden-Netto-Einkaufspreis / Datanorm Preistyp 2) neben Listenpreis (Schema 17):**
+    - **Ursache geklärt:** In der Preisdatei `datpreis.001` (Datanorm Satzart P) übermittelt Fega für jeden Artikel zwei Sätze: `Preistyp 1` = Listenpreis (z. B. `120444`: 12,90 €) und `Preistyp 2` = Eigener Netto-Einkaufspreis („Mein Preis“, z. B. `120444`: 2,81 €). Bisher speicherte BeLiKo nur den Listenpreis in `articles.listenpreis`; der eigene Einkaufspreis ging verloren.
+    - **Datenbank & Datenmodell (Schema 17):** Neues Feld `ekpreis` (`DECIMAL(12,4)`) in Tabelle `articles` sowie die Properties `mein_preis` und `effektiver_preis` am `Article`-Modell (gibt `ekpreis` zurück oder `listenpreis` als Fallback).
+    - **Datanorm-Einleser (`datanorm.py`) & Import:** Liest Preistyp 2 als `ekpreis` ein (sowohl in `datpreis.001`, in kombinierten ZIP-Dateien als auch bei Satzart A mit Preiskennzeichen 2) und aktualisiert bei der Preispflege sowohl Listenpreis als auch Einkaufspreis exakt auf die Einheit normiert (inkl. PE 100/1000).
+    - **Materialübersicht (`/artikel?ansicht=liste`):** Besitzt nun zwei separate, übersichtliche Preisspalten: **„Mein Preis (EK)“** (prominent in Fettschrift) und **„Listenpreis“** (Katalogpreis/UVP).
+    - **Lieferanten-Vergleich (`/artikel?ansicht=vergleich`):** Zeigt vorrangig „Mein Preis“ an (mit UVP-Listenpreis darunter klein). Die Berechnung für **„Günstigster“**, Mehrpreise und Prozente basiert nun auf dem tatsächlichen Einkaufspreis, den der Handwerksbetrieb zahlt.
+    - **Bestellungen:** Beim automatischen Vorbelegen von Artikelpreisen in Bestellungen wird ab sofort „Mein Preis“ (Netto-EK) eingetragen statt des Katalog-Listenpreises.
 - **1.3.2**
   - **Performance-Optimierung Artikelstamm & 3-Spalten-Lieferantenvergleich (Schema 16):**
     - **Flaschenhals behoben:** Die Suche im Lieferantenvergleich (und in der Materialübersicht) dauerte bei ~1 Million Artikeln zuvor 20–30 Sekunden, obwohl der Raspberry Pi 5 kaum CPU-Last zeigte (I/O-Warten durch unindizierte Full Table Scans auf MariaDB). Nach der Optimierung antwortet die Suche in wenigen Millisekunden (< 50 ms).

@@ -119,15 +119,31 @@
           </td>
           {% for l in spalten_lief %}
             {% set art = z.je_lief.get(l.id) %}
-            {% set ist_guenstig = art and art.listenpreis is not none and z.min_preis is not none and z.hat_unterschied and art.listenpreis == z.min_preis %}
+            {% set eff_p = art.effektiver_preis if art else none %}
+            {% set ist_guenstig = art and eff_p is not none and z.min_preis is not none and z.hat_unterschied and eff_p == z.min_preis %}
             <td class="sp-zelle {{ 'guenstig' if ist_guenstig else '' }}">
               {% if art %}
                 <div>
-                  <span class="preis-gross">{{ art.listenpreis|preis if art.listenpreis is not none else '–' }}</span>
-                  {% if ist_guenstig %}
-                    <span class="chip ok">Günstigster</span>
-                  {% elif art.listenpreis is not none and z.min_preis is not none and art.listenpreis > z.min_preis %}
-                    <span class="preis-diff">+{{ (art.listenpreis - z.min_preis)|preis }} (+{{ (((art.listenpreis - z.min_preis) / z.min_preis) * 100)|round(1) }} %)</span>
+                  {% if art.ekpreis is not none %}
+                    <span class="preis-gross" title="Mein Einkaufspreis netto">{{ art.ekpreis|preis }}</span>
+                    {% if ist_guenstig %}
+                      <span class="chip ok">Günstigster</span>
+                    {% elif z.min_preis is not none and eff_p > z.min_preis %}
+                      <span class="preis-diff">+{{ (eff_p - z.min_preis)|preis }} (+{{ (((eff_p - z.min_preis) / z.min_preis) * 100)|round(1) }} %)</span>
+                    {% endif %}
+                    {% if art.listenpreis and art.listenpreis != art.ekpreis %}
+                      <div><small class="sub" style="opacity:0.75">Liste: {{ art.listenpreis|preis }}</small></div>
+                    {% endif %}
+                  {% elif art.listenpreis is not none %}
+                    <span class="preis-gross" title="Listenpreis">{{ art.listenpreis|preis }}</span>
+                    <small class="sub">(Liste)</small>
+                    {% if ist_guenstig %}
+                      <span class="chip ok">Günstigster</span>
+                    {% elif z.min_preis is not none and eff_p > z.min_preis %}
+                      <span class="preis-diff">+{{ (eff_p - z.min_preis)|preis }} (+{{ (((eff_p - z.min_preis) / z.min_preis) * 100)|round(1) }} %)</span>
+                    {% endif %}
+                  {% else %}
+                    <span class="preis-gross">–</span>
                   {% endif %}
                 </div>
                 <small class="sub">
@@ -213,7 +229,8 @@
       <th>Hersteller</th>
       <th>Hersteller-Art.-Nr.</th>
       <th>Einheit</th>
-      <th class="r">Preis</th>
+      <th class="r">Mein Preis (EK)</th>
+      <th class="r">Listenpreis</th>
       <th>Kupfer / EAN</th>
       <th>Rabattgr.</th>
       <th>Lieferant</th>
@@ -229,8 +246,20 @@
     <td>{{ a.hersteller_artnr_anzeige or '–' }}</td>
     <td>{{ a.einheit or '–' }}</td>
     <td class="r">
-      {{ a.listenpreis|preis if a.listenpreis is not none else '–' }}
+      {% if a.ekpreis is not none %}
+        <b>{{ a.ekpreis|preis }}</b>
+      {% else %}
+        <span class="sub">–</span>
+      {% endif %}
       {% if a.preiseinheit and a.preiseinheit > 1 %}<small class="sub">je {{ a.einheit or 'Einh.' }} (PE {{ a.preiseinheit }})</small>{% endif %}
+    </td>
+    <td class="r">
+      {% if a.listenpreis is not none %}
+        <span class="sub">{{ a.listenpreis|preis }}</span>
+        {% if a.preiseinheit and a.preiseinheit > 1 and a.ekpreis is none %}<small class="sub">je {{ a.einheit or 'Einh.' }} (PE {{ a.preiseinheit }})</small>{% endif %}
+      {% else %}
+        <span class="sub">–</span>
+      {% endif %}
     </td>
     <td>
       {% if a.kupfergewicht or a.kupferbasis %}

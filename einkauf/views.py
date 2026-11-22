@@ -1537,8 +1537,8 @@ def ugl_position_anlegen(oid):
             art = g.db.query(Article).filter(Article.supplier_id == o.supplier_id, Article.artikelnr == neu.artikelnr).first()
             if not art:
                 art = g.db.query(Article).filter(Article.artikelnr == neu.artikelnr).first()
-            if art and art.listenpreis is not None:
-                neu.preis = art.listenpreis
+            if art and art.effektiver_preis is not None:
+                neu.preis = art.effektiver_preis
 
     g.db.add(neu)
     o.status_aktualisieren()
@@ -2627,7 +2627,7 @@ def artikel():
                     gruppen[schluessel] = {"leit": a, "je_lief": {}}
                 # Falls mehrere Artikel eines Lieferanten dieselbe EAN haben, den mit Preis bevorzugen
                 vorh = gruppen[schluessel]["je_lief"].get(a.supplier_id)
-                if vorh is None or (vorh.listenpreis is None and a.listenpreis is not None):
+                if vorh is None or (vorh.effektiver_preis is None and a.effektiver_preis is not None):
                     gruppen[schluessel]["je_lief"][a.supplier_id] = a
 
             for schluessel, grp in gruppen.items():
@@ -2637,8 +2637,8 @@ def artikel():
                     continue
                 leit = grp["leit"]
                 preise_vorh = [
-                    art.listenpreis for art in je_lief.values()
-                    if art.listenpreis is not None and art.listenpreis > 0
+                    art.effektiver_preis for art in je_lief.values()
+                    if art.effektiver_preis is not None and art.effektiver_preis > 0
                 ]
                 min_p = min(preise_vorh) if len(preise_vorh) >= 2 else None
                 max_p = max(preise_vorh) if len(preise_vorh) >= 2 else None
@@ -2792,19 +2792,26 @@ def artikel_import():
         if ist_nur_preise:
             # Reine Preispflege: Nur bestehende Artikel aktualisieren
             akt, uebersprungen = 0, 0
-            preis_quellen = r["preise"] if r["preise"] else {d["artikelnr"]: d for d in r["artikel"] if d.get("listenpreis") is not None}
+            preis_quellen = r["preise"] if r["preise"] else {d["artikelnr"]: d for d in r["artikel"] if d.get("listenpreis") is not None or d.get("ekpreis") is not None}
             for artnr, pd in preis_quellen.items():
                 a = bestehende.get(artnr)
                 if a:
+                    eff_pe = pd.get("preiseinheit") or a.preiseinheit or 1
                     if pd.get("preiseinheit"):
                         a.preiseinheit = pd["preiseinheit"]
-                        if pd.get("listenpreis") is not None:
-                            a.listenpreis = pd["listenpreis"]
-                    elif pd.get("roher_preis_eur") is not None:
-                        eff_pe = a.preiseinheit or 1
-                        a.listenpreis = (pd["roher_preis_eur"] / Decimal(eff_pe)).quantize(Decimal("0.0001"))
+
+                    if pd.get("roher_listenpreis_eur") is not None:
+                        a.listenpreis = (pd["roher_listenpreis_eur"] / Decimal(eff_pe)).quantize(Decimal("0.0001"))
                     elif pd.get("listenpreis") is not None:
-                        a.listenpreis = pd["listenpreis"]
+                        a.listenpreis = (pd["listenpreis"] if pd.get("preiseinheit") else (pd["listenpreis"] / Decimal(eff_pe))).quantize(Decimal("0.0001"))
+
+                    if pd.get("roher_ekpreis_eur") is not None:
+                        a.ekpreis = (pd["roher_ekpreis_eur"] / Decimal(eff_pe)).quantize(Decimal("0.0001"))
+                    elif pd.get("ekpreis") is not None:
+                        a.ekpreis = (pd["ekpreis"] if pd.get("preiseinheit") else (pd["ekpreis"] / Decimal(eff_pe))).quantize(Decimal("0.0001"))
+
+                    if a.listenpreis is None and a.ekpreis is not None:
+                        a.listenpreis = a.ekpreis
                     if sid:
                         a.supplier_id = sid
                     a.updated_at = datetime.now()
@@ -2833,6 +2840,7 @@ def artikel_import():
                 a.kurztext2 = d.get("kurztext2")
                 a.einheit = d.get("einheit")
                 a.listenpreis = d.get("listenpreis")
+                a.ekpreis = d.get("ekpreis")
                 a.preiseinheit = d.get("preiseinheit", 1)
                 a.rabattgruppe = d.get("rabattgruppe")
                 if d.get("kupferbasis") is not None:

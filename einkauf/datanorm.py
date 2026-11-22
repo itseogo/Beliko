@@ -221,18 +221,23 @@ def lesen(daten: bytes, modus: str = "auto"):
                         for a in res["artikel"]:
                             pd = p_map.get(a["artikelnr"])
                             if pd:
-                                if pd.get("preiseinheit"):
-                                    a["preiseinheit"] = pd["preiseinheit"]
-                                    if pd.get("listenpreis") is not None:
-                                        a["listenpreis"] = pd["listenpreis"]
-                                elif pd.get("roher_preis_eur") is not None:
-                                    eff_pe = a.get("preiseinheit") or 1
-                                    norm_p = (pd["roher_preis_eur"] / Decimal(eff_pe)).quantize(Decimal("0.0001"))
-                                    a["listenpreis"] = norm_p
-                                    pd["listenpreis"] = norm_p
-                                    pd["preiseinheit"] = eff_pe
+                                hatte_pe = bool(pd.get("preiseinheit"))
+                                eff_pe = pd.get("preiseinheit") or a.get("preiseinheit") or 1
+                                a["preiseinheit"] = eff_pe
+                                pd["preiseinheit"] = eff_pe
+
+                                if pd.get("roher_listenpreis_eur") is not None:
+                                    a["listenpreis"] = (pd["roher_listenpreis_eur"] / Decimal(eff_pe)).quantize(Decimal("0.0001"))
                                 elif pd.get("listenpreis") is not None:
-                                    a["listenpreis"] = pd["listenpreis"]
+                                    a["listenpreis"] = (pd["listenpreis"] if hatte_pe else (pd["listenpreis"] / Decimal(eff_pe))).quantize(Decimal("0.0001"))
+
+                                if pd.get("roher_ekpreis_eur") is not None:
+                                    a["ekpreis"] = (pd["roher_ekpreis_eur"] / Decimal(eff_pe)).quantize(Decimal("0.0001"))
+                                elif pd.get("ekpreis") is not None:
+                                    a["ekpreis"] = (pd["ekpreis"] if hatte_pe else (pd["ekpreis"] / Decimal(eff_pe))).quantize(Decimal("0.0001"))
+
+                                if a.get("listenpreis") is None and a.get("ekpreis") is not None:
+                                    a["listenpreis"] = a["ekpreis"]
                         res["preise"].update(p_map)
                     return res
                 elif preis_datei:
@@ -323,7 +328,10 @@ def lesen(daten: bytes, modus: str = "auto"):
 
             einheit = EINHEITEN.get(me_raw, me_raw[:20] if me_raw else "Stück")
             pe = _pe_faktor(pe_raw, is_dn5=is_dn5)
-            listenpreis = _dec_preis(p_raw, pe=pe)
+            preiskz = felder[6].strip() if len(felder) > 6 else "1"
+            parsed_p = _dec_preis(p_raw, pe=pe)
+            listenpreis = parsed_p if preiskz != "2" else None
+            ekpreis = parsed_p if preiskz == "2" else None
 
             if artnr in artikel:
                 a = artikel[artnr]
@@ -333,6 +341,8 @@ def lesen(daten: bytes, modus: str = "auto"):
                 a["preiseinheit"] = pe
                 if listenpreis is not None:
                     a["listenpreis"] = listenpreis
+                if ekpreis is not None:
+                    a["ekpreis"] = ekpreis
                 if rabatt:
                     a["rabattgruppe"] = rabatt
                 if matchcode:
@@ -349,6 +359,7 @@ def lesen(daten: bytes, modus: str = "auto"):
                     "einheit": einheit,
                     "preiseinheit": pe,
                     "listenpreis": listenpreis,
+                    "ekpreis": ekpreis,
                     "rabattgruppe": rabatt,
                     "matchcode": matchcode,
                     "hersteller_artnr": herst_nr,
@@ -469,6 +480,7 @@ def lesen(daten: bytes, modus: str = "auto"):
                     # Falls nur EK-Preis da war (z. B. Löffelhardt Preispflege), als Listenpreis vorsehen
                     if preise[artnr]["listenpreis"] is None and preise[artnr].get("ekpreis") is not None:
                         preise[artnr]["listenpreis"] = preise[artnr]["ekpreis"]
+                        preise[artnr]["roher_listenpreis_eur"] = preise[artnr].get("roher_ekpreis_eur")
                     preise[artnr]["roher_preis_eur"] = (
                         preise[artnr].get("roher_listenpreis_eur")
                         if preise[artnr].get("roher_listenpreis_eur") is not None
@@ -476,10 +488,14 @@ def lesen(daten: bytes, modus: str = "auto"):
                     )
 
                     if artnr in artikel:
-                        if preistyp == "1" or artikel[artnr].get("listenpreis") is None:
+                        if preistyp == "2":
+                            artikel[artnr]["ekpreis"] = preis
+                        elif preistyp == "1":
                             artikel[artnr]["listenpreis"] = preis
-                            if pe_explizit is not None:
-                                artikel[artnr]["preiseinheit"] = pe_explizit
+                        elif artikel[artnr].get("listenpreis") is None:
+                            artikel[artnr]["listenpreis"] = preis
+                        if pe_explizit is not None:
+                            artikel[artnr]["preiseinheit"] = pe_explizit
 
         elif satz == "S":
             # Satzart S: Warengruppen (Datanorm 4/5)

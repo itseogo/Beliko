@@ -73,12 +73,14 @@ with app.app_context():
             supplier_id=s2.id,
         )
         # Zweiter LS-Schalter ohne EAN, aber mit Hersteller-Artnr Match
+        # Fega hat Listenpreis 12,90 € und eigenen Netto-EK 2,81 €
         a3 = Article(
             artikelnr="120444",
             bezeichnung="SIEM Leitungsschutzschalter B16",
             kurztext2="5SY4116-6 B16A 1polig 10kA",
             einheit="Stück",
             listenpreis=Decimal("12.90"),
+            ekpreis=Decimal("2.81"),
             ean=None,
             hersteller="Siemens",
             hersteller_artnr="5SY4116-6",
@@ -119,8 +121,9 @@ assert "5SY4116-7" in h_verg
 assert "32,10" in h_verg
 assert "29,90" in h_verg
 assert "5SY4116-6" in h_verg
-assert "12,90" in h_verg
-assert "11,50" in h_verg
+assert "2,81" in h_verg   # Fega Mein Preis (EK)
+assert "12,90" in h_verg  # Fega Listenpreis
+assert "11,50" in h_verg  # Rexel Preis
 # EATO Wendeschalter darf bei 5sy4116 nicht auftauchen
 assert "EATO Wendeschalter" not in h_verg
 
@@ -133,6 +136,8 @@ assert "EATO Wendeschalter" not in h_nur_gem
 h_liste_fast = G("/artikel?ansicht=liste&q=5sy4116")
 assert "5SY4116-7" in h_liste_fast
 assert "5SY4116-6" in h_liste_fast
+assert "2,81" in h_liste_fast   # Mein Preis (EK)
+assert "12,90" in h_liste_fast  # Listenpreis
 assert "EATO" not in h_liste_fast
 
 # 7. Test: Materialübersicht Teilstring-Fallback (Suche nach Begriff in Bezeichnung)

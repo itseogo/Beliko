@@ -479,6 +479,7 @@ class Article(Base):
     kurztext2: Mapped[str | None] = mapped_column(String(300))
     einheit: Mapped[str | None] = mapped_column(String(20))
     listenpreis: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+    ekpreis: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))  # Kunden-Netto-Einkaufspreis ("Mein Preis") aus Datanorm Preistyp 2
     preiseinheit: Mapped[int | None] = mapped_column(Integer, default=1)
     rabattgruppe: Mapped[str | None] = mapped_column(String(30))
     kupferbasis: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
@@ -492,6 +493,15 @@ class Article(Base):
     quelle: Mapped[str] = mapped_column(String(20), default="datanorm")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     supplier: Mapped["Supplier | None"] = relationship()
+
+    @property
+    def mein_preis(self) -> Decimal | None:
+        """Gibt den Netto-Einkaufspreis ('Mein Preis') zurück, oder Listenpreis als Fallback."""
+        return self.ekpreis if self.ekpreis is not None else self.listenpreis
+
+    @property
+    def effektiver_preis(self) -> Decimal | None:
+        return self.ekpreis if self.ekpreis is not None else self.listenpreis
 
     @property
     def hersteller_anzeige(self) -> str | None:
