@@ -300,6 +300,11 @@ Echte Dateien des Lieferanten nicht ins Paket legen; `tests/make_ugl.py` baut ei
     - **Kupferfelder im Artikelstamm:** Speichert Kupferbasis (z. B. 150 €/100kg), Kupfergewicht/Cu-Zahl (z. B. 16,8 kg Cu pro 100m) und Kupfermerker (1=100m, 2=1000m, 3=1 Stk) sowie EAN, Matchcode und Hersteller-Teilenummer.
     - **Reine Preis-Datanorm (Preispflege):** Neue Import-Option unter `/artikel/import` ermöglicht das Einspielen von reinen Preispflege-Dateien (`DATPREIS`, Satzart P). Aktualisiert nur die Listenpreise bereits vorhandener Artikel, ohne Artikeltexte zu verändern oder Fremdartikel anzulegen.
     - **Artikelübersicht (`/artikel`):** Zeigt Kupferdaten (`Cu: 16,8 kg / 100m (Basis 150 €)`), EAN, Hersteller-Teilenummer und Preiseinheiten transparent an.
+  - **Tabellarische Positionserfassung in der Bestelldetailansicht (`/bestellungen/<id>`):**
+    - Umbau des bisherigen zweizeiligen Kachel-Formulars („Position hinzufügen“ mit `grid4`) in eine kompakte, übersichtliche Zeilentabelle (`table.zeilen`).
+    - Spalten: `Artikelnr.`, `Bezeichnung *`, `Menge *`, `Einheit`, `Einzelpreis netto`, `Voraussichtlich`, `Projekt`, `Kommission`.
+    - Neuer Button **„+ Zeile“**: Ermöglicht das Anlegen beliebig vieler Positionen auf einmal direkt in der Tabelle (inklusive Zeilen löschen mit `✕` und automatischer Enter-Weiterschaltung).
+    - Alle erfassten Zeilen werden mit einem Klick auf „Position hinzufügen“ gebucht.
   - **Spaltensortierung für die Projekttabelle (wie Windows Explorer):**
     - Klick auf einen Spaltenkopf (`Nr.`, `Name`, `Kunde`, `Status`, `Offen`, `Bestellt`, `Materialbudget`) sortiert beim 1. Mausklick aufsteigend (`asc`: hochzählend bzw. A–Z) und beim 2. Mausklick absteigend (`desc`: runterzählend bzw. Z–A).
     - Windows-Explorer-typische natürliche Sortierung (Natural Sort) für Projektnummern (`_nat_key` / `localeCompare` mit `numeric: true`), sodass z. B. `P-2026-0001` vor `P-2026-0010` sortiert wird.

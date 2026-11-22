@@ -105,20 +105,76 @@
 {% else %}<p class="leer">Noch keine Positionen. Erfasse unten die erste.</p>{% endif %}
 
 {% if bearbeiten %}
-<form method="post" action="{{ url_for('main.position_neu', oid=o.id) }}" class="panel">
-  <h3>Position hinzufügen</h3>{{ csrf() }}
-  <div class="grid4">
-    {{ field('Artikelnummer', 'artikelnr', '') }}
-    {{ field('Bezeichnung', 'bezeichnung', '', required=True) }}
-    {{ field('Menge', 'menge', '', required=True, mode='decimal') }}
-    {{ field('Einheit', 'einheit', 'Stück', hint='Stück, m, Rolle …') }}
-    {{ field('Einzelpreis netto', 'preis', '', mode='decimal') }}
-    {{ field('Voraussichtlich geliefert', 'erw_lieferdatum', '', type='date') }}
-    {{ field('Kommission', 'kommission', '', hint='z. B. kirsch 2x / 1x Lager') }}
-    <label class="f"><span>Projekt</span><select name="project_id"><option value="">Ohne Projekt</option>
-      {% for p in projekte %}<option value="{{ p.id }}">{{ p.nummer }} {{ p.name }}</option>{% endfor %}</select></label>
+<form method="post" action="{{ url_for('main.position_neu', oid=o.id) }}" class="panel" style="margin-top:1.5rem">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+    <h3 style="margin:0">Position hinzufügen</h3>
+    <button type="button" class="btn sek klein" id="pos-zeile-neu" style="display:inline-flex;align-items:center;gap:.3rem">+ Zeile</button>
   </div>
-  <button class="btn">Position hinzufügen</button>
+  {{ csrf() }}
+  <div class="scroll">
+    <table class="zeilen" style="width:100%">
+      <thead>
+        <tr>
+          <th>Artikelnr.</th>
+          <th>Bezeichnung *</th>
+          <th class="r">Menge *</th>
+          <th>Einheit</th>
+          <th class="r">Einzelpreis netto</th>
+          <th>Voraussichtlich</th>
+          <th>Projekt</th>
+          <th>Kommission</th>
+          <th style="width:2.5rem"></th>
+        </tr>
+      </thead>
+      <tbody id="pos-neu-zeilen">
+        <tr class="zeile">
+          <td><input name="row_artikelnr" placeholder="Artikelnr." aria-label="Artikelnummer"></td>
+          <td><input name="row_bezeichnung" required placeholder="Bezeichnung (Pflicht)" aria-label="Bezeichnung" style="min-width:14rem"></td>
+          <td><input name="row_menge" required inputmode="decimal" class="r" placeholder="1" aria-label="Menge" style="min-width:4.5rem"></td>
+          <td><input name="row_einheit" value="Stück" placeholder="Stück, m …" aria-label="Einheit" style="min-width:5rem"></td>
+          <td><input name="row_preis" inputmode="decimal" class="r" placeholder="0,00 €" aria-label="Einzelpreis netto" style="min-width:5.5rem"></td>
+          <td><input type="date" name="row_termin" value="{{ o.wunschtermin.isoformat() if o.wunschtermin else '' }}" aria-label="Voraussichtlich geliefert"></td>
+          <td>
+            <select name="row_projekt" aria-label="Projekt">
+              <option value="">Ohne Projekt</option>
+              {% for p in projekte %}
+              <option value="{{ p.id }}">{{ p.nummer }} {{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </td>
+          <td><input name="row_kommission" placeholder="z. B. kirsch 2x" aria-label="Kommission"></td>
+          <td style="text-align:center">
+            <button type="button" class="link-b entf" title="Zeile entfernen" aria-label="Zeile entfernen" style="visibility:hidden">✕</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <template id="pos-vorlage">
+    <tr class="zeile">
+      <td><input name="row_artikelnr" placeholder="Artikelnr." aria-label="Artikelnummer"></td>
+      <td><input name="row_bezeichnung" placeholder="Bezeichnung" aria-label="Bezeichnung" style="min-width:14rem"></td>
+      <td><input name="row_menge" inputmode="decimal" class="r" placeholder="1" aria-label="Menge" style="min-width:4.5rem"></td>
+      <td><input name="row_einheit" value="Stück" placeholder="Stück, m …" aria-label="Einheit" style="min-width:5rem"></td>
+      <td><input name="row_preis" inputmode="decimal" class="r" placeholder="0,00 €" aria-label="Einzelpreis netto" style="min-width:5.5rem"></td>
+      <td><input type="date" name="row_termin" value="{{ o.wunschtermin.isoformat() if o.wunschtermin else '' }}" aria-label="Voraussichtlich geliefert"></td>
+      <td>
+        <select name="row_projekt" aria-label="Projekt">
+          <option value="">Ohne Projekt</option>
+          {% for p in projekte %}
+          <option value="{{ p.id }}">{{ p.nummer }} {{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </td>
+      <td><input name="row_kommission" placeholder="z. B. kirsch 2x" aria-label="Kommission"></td>
+      <td style="text-align:center">
+        <button type="button" class="link-b entf" title="Zeile entfernen" aria-label="Zeile entfernen">✕</button>
+      </td>
+    </tr>
+  </template>
+  <div style="margin-top:.85rem;display:flex;gap:.75rem;align-items:center">
+    <button class="btn">Position hinzufügen</button>
+  </div>
 </form>
 
 {% if offene %}
@@ -287,5 +343,65 @@ function lieferscheinFiltern(q) {
 <div class="lieferung"><b>{{ d.datum|datum }}</b>{% if d.lieferschein_nr %} · Lieferschein {{ d.lieferschein_nr }}{% if sfx %} <span class="chip" style="font-size:.72rem;padding:.05rem .35rem">Teillieferung {{ sfx }}</span>{% endif %}{% endif %}
 <ul>{% for di in d.items %}<li>{{ di.menge|qty }} × {{ di.item.bezeichnung }}</li>{% endfor %}</ul></div>
 {% endfor %}
+{% endif %}
+{% if bearbeiten %}
+<script>
+(function () {
+  var tb = document.getElementById('pos-neu-zeilen');
+  var vorlage = document.getElementById('pos-vorlage');
+  var btnNeu = document.getElementById('pos-zeile-neu');
+  if (!tb || !vorlage || !btnNeu) return;
+
+  function aktualisiereButtons() {
+    var zeilen = tb.querySelectorAll('tr.zeile');
+    zeilen.forEach(function (z) {
+      var btnEntf = z.querySelector('.entf');
+      if (btnEntf) {
+        btnEntf.style.visibility = zeilen.length > 1 ? 'visible' : 'hidden';
+      }
+    });
+  }
+
+  function neueZeile() {
+    var z = vorlage.content.firstElementChild.cloneNode(true);
+    tb.appendChild(z);
+    aktualisiereButtons();
+    return z;
+  }
+
+  btnNeu.addEventListener('click', function () {
+    var z = neueZeile();
+    var inp = z.querySelector('input');
+    if (inp) inp.focus();
+  });
+
+  tb.addEventListener('click', function (e) {
+    var b = e.target.closest('.entf');
+    if (!b) return;
+    var z = b.closest('tr');
+    if (tb.children.length > 1) {
+      z.remove();
+      aktualisiereButtons();
+    } else {
+      z.querySelectorAll('input:not([type=hidden])').forEach(function (i) {
+        i.value = i.name === 'row_einheit' ? 'Stück' : '';
+      });
+    }
+  });
+
+  tb.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' || e.target.tagName === 'BUTTON') return;
+    if (e.target.name === 'row_kommission') {
+      var z = e.target.closest('tr');
+      if (!z.nextElementSibling) {
+        e.preventDefault();
+        var neu = neueZeile();
+        var f = neu.querySelector('input');
+        if (f) f.focus();
+      }
+    }
+  });
+})();
+</script>
 {% endif %}
 {% endblock %}

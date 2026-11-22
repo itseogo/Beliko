@@ -993,6 +993,23 @@ def _position_lesen(i):
 @edit_required
 def position_neu(oid):
     o = g.db.get(Order, oid) or abort(404)
+    if "row_bezeichnung" in request.form:
+        positionen, fehler, _ = _positionen_aus_formular()
+        if fehler:
+            flash(fehler, "fehler")
+            return redirect(url_for("main.bestellung_detail", oid=oid) + "#positionen")
+        if not positionen:
+            flash("Bitte mindestens eine Position mit Bezeichnung und Menge ausfüllen.", "fehler")
+            return redirect(url_for("main.bestellung_detail", oid=oid) + "#positionen")
+        for pos in positionen:
+            pos.order_id = o.id
+            g.db.add(pos)
+        g.db.commit()
+        status_pruefen(oid)
+        anz = len(positionen)
+        flash(f"{anz} Position{'en' if anz > 1 else ''} hinzugefügt.", "ok")
+        return redirect(url_for("main.bestellung_detail", oid=oid) + "#positionen")
+
     i = OrderItem(order_id=o.id)
     fehler = _position_lesen(i)
     if fehler:
