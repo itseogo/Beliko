@@ -414,6 +414,23 @@ class LexDocumentItem(Base):
     materialanteil: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), default=Decimal("100.00"))
 
     document: Mapped[LexDocument] = relationship(back_populates="items")
+    parts: Mapped[list["LexDocumentItemPart"]] = relationship(
+        back_populates="item", order_by="LexDocumentItemPart.id", cascade="all, delete-orphan",
+    )
+
+    @property
+    def parts_ek_summe(self) -> Decimal:
+        return sum(
+            ((p.menge or Decimal("0")) * (p.ek_preis or Decimal("0")) for p in self.parts),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+
+    @property
+    def parts_vk_summe(self) -> Decimal:
+        return sum(
+            ((p.menge or Decimal("0")) * (p.vk_preis if p.vk_preis is not None else (p.ek_preis or Decimal("0"))) for p in self.parts),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
 
     @property
     def ist_unklar(self):
@@ -433,6 +450,23 @@ class LexDocumentItem(Base):
             anteil = self.materialanteil if self.materialanteil is not None else Decimal("0")
             return (self.gesamt_netto * anteil / Decimal("100")).quantize(Decimal("0.01"))
         return Decimal("0.00")
+
+
+class LexDocumentItemPart(Base):
+    """Hinterlegte Artikel / Stückliste (interne Kalkulation) zu einer Angebotsposition."""
+    __tablename__ = "lex_document_item_parts"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("lex_document_items.id"))
+    article_id: Mapped[int | None] = mapped_column(ForeignKey("articles.id"))
+    artikelnr: Mapped[str | None] = mapped_column(String(100))
+    lieferant_name: Mapped[str | None] = mapped_column(String(120))
+    bezeichnung: Mapped[str] = mapped_column(String(300))
+    menge: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=Decimal("1"))
+    einheit: Mapped[str | None] = mapped_column(String(30), default="Stück")
+    ek_preis: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+    vk_preis: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+
+    item: Mapped[LexDocumentItem] = relationship(back_populates="parts")
 
 
 class LexArticleRule(Base):

@@ -19,7 +19,7 @@ import zipfile
 
 from . import config, datanorm, db, einstellungen, formate, ids, lexoffice, lieferantendateien, nummern, security, sperre, ugl, zugferd
 from .models import (Article, AuditLog, Contact, ContactPerson, Delivery, DeliveryItem, EditLock,
-                     LexArticleRule, LexDocument, LexDocumentItem, Order, OrderItem, Project,
+                     LexArticleRule, LexDocument, LexDocumentItem, LexDocumentItemPart, Order, OrderItem, Project,
                      Supplier, SupplierFile, SupplierInvoice, User)
 from .security import admin_required, edit_required, login_required
 
@@ -2342,7 +2342,7 @@ def lex_beleg_detail(did):
     doc = (g.db.query(LexDocument).options(
         joinedload(LexDocument.project),
         joinedload(LexDocument.contact),
-        selectinload(LexDocument.items),
+        selectinload(LexDocument.items).selectinload(LexDocumentItem.parts),
     ).filter(LexDocument.id == did).first()) or abort(404)
     gesperrt_von = None
     if g.user.role != "leser":
@@ -2401,7 +2401,7 @@ def lex_beleg_detail(did):
 
 
 def _angebot_positionen_aus_formular(doc):
-    """Liest Angebotspositionen aus request.form in doc.items ein und berechnet Netto/Brutto."""
+    """Liest Angebotspositionen (inkl. hinterlegter Unterartikel/Stückliste) aus request.form ein und berechnet Netto/Brutto."""
     bez_l = request.form.getlist("pos_bez")
     beschr_l = request.form.getlist("pos_beschr")
     menge_l = request.form.getlist("pos_menge")
@@ -2409,6 +2409,7 @@ def _angebot_positionen_aus_formular(doc):
     ep_l = request.form.getlist("pos_ep")
     rab_l = request.form.getlist("pos_rabatt")
     ka_l = request.form.getlist("pos_ka")
+    teile_l = request.form.getlist("pos_teile")
 
     doc.items.clear()
     netto_sum = Decimal("0.00")
@@ -2438,7 +2439,7 @@ def _angebot_positionen_aus_formular(doc):
         faktor = (Decimal("100") - rab) / Decimal("100")
         gesamt = (menge * ep * faktor).quantize(Decimal("0.01"))
         netto_sum += gesamt
-        doc.items.append(LexDocumentItem(
+        item = LexDocumentItem(
             position=pos_nr,
             lex_typ="custom",
             bezeichnung=bez[:300],
@@ -2450,12 +2451,128 @@ def _angebot_positionen_aus_formular(doc):
             gesamt_netto=gesamt,
             kostenart=ka,
             materialanteil=anteil,
-        ))
+        )
+
+        # Hinterlegte Artikel / Stückliste zur Position parsen
+        raw_teile = (teile_l[idx] if idx < len(teile_l) else "").strip()
+        if raw_teile:
+            try:
+                liste = json.loads(raw_teile)
+            except Exception:
+                liste = []
+            if isinstance(liste, list):
+                for t in liste:
+                    if not isinstance(t, dict):
+                        continue
+                    t_bez = (str(t.get("bezeichnung") or "")).strip()[:300]
+                    if not t_bez:
+                        continue
+                    t_m = dec(str(t.get("menge") if t.get("menge") is not None else "1"))
+                    if t_m is None or t_m <= 0:
+                        t_m = Decimal("1")
+                    t_ek = dec(str(t.get("ek_preis"))) if t.get("ek_preis") not in (None, "") else None
+                    t_vk = dec(str(t.get("vk_preis"))) if t.get("vk_preis") not in (None, "") else None
+                    art_id = t.get("article_id")
+                    try:
+                        art_id = int(art_id) if art_id else None
+                    except (TypeError, ValueError):
+                        art_id = None
+                    if art_id and not g.db.get(Article, art_id):
+                        art_id = None
+                    item.parts.append(LexDocumentItemPart(
+                        article_id=art_id,
+                        artikelnr=(str(t.get("artikelnr") or "").strip()[:100] or None),
+                        lieferant_name=(str(t.get("lieferant_name") or "").strip()[:120] or None),
+                        bezeichnung=t_bez,
+                        menge=t_m,
+                        einheit=(str(t.get("einheit") or "Stück").strip()[:30] or "Stück"),
+                        ek_preis=(t_ek.quantize(Decimal("0.0001")) if t_ek is not None else None),
+                        vk_preis=(t_vk.quantize(Decimal("0.0001")) if t_vk is not None else None),
+                    ))
+
+        doc.items.append(item)
 
     mwst = doc.mwst_satz if doc.mwst_satz is not None else Decimal("19.00")
     doc.netto = netto_sum.quantize(Decimal("0.01"))
     doc.brutto = (doc.netto * (Decimal("100") + mwst) / Decimal("100")).quantize(Decimal("0.01"))
     return pos_nr
+
+
+def _item_teile_json(item):
+    if not item or not item.parts:
+        return "[]"
+    return json.dumps([
+        {
+            "article_id": p.article_id,
+            "artikelnr": p.artikelnr or "",
+            "lieferant_name": p.lieferant_name or "",
+            "bezeichnung": p.bezeichnung,
+            "menge": float(p.menge) if p.menge is not None else 1,
+            "einheit": p.einheit or "Stück",
+            "ek_preis": float(p.ek_preis) if p.ek_preis is not None else None,
+            "vk_preis": float(p.vk_preis) if p.vk_preis is not None else None,
+        }
+        for p in item.parts
+    ])
+
+
+@main.route("/api/artikel/suche")
+@login_required
+def api_artikel_suche():
+    """Schnelle JSON-Suche im Datanorm-Artikelstamm für die Angebots-Stückliste."""
+    q_str = (request.args.get("q") or "").strip()
+    if len(q_str) < 2:
+        return jsonify({"ok": True, "artikel": []})
+    prefix = f"{q_str}%"
+    like = f"%{q_str}%"
+    treffer = []
+    seen = set()
+    for col in (Article.hersteller_artnr, Article.artikelnr, Article.ean, Article.hersteller):
+        rows = (
+            g.db.query(Article)
+            .options(joinedload(Article.supplier))
+            .filter(col.like(prefix))
+            .limit(15)
+            .all()
+        )
+        for a in rows:
+            if a.id not in seen:
+                seen.add(a.id)
+                treffer.append(a)
+                if len(treffer) >= 20:
+                    break
+        if len(treffer) >= 20:
+            break
+    if len(treffer) < 10:
+        rows = (
+            g.db.query(Article)
+            .options(joinedload(Article.supplier))
+            .filter(or_(Article.bezeichnung.like(like), Article.kurztext2.like(like)))
+            .limit(20 - len(treffer))
+            .all()
+        )
+        for a in rows:
+            if a.id not in seen:
+                seen.add(a.id)
+                treffer.append(a)
+    return jsonify({
+        "ok": True,
+        "artikel": [
+            {
+                "id": a.id,
+                "artikelnr": a.artikelnr,
+                "bezeichnung": a.bezeichnung,
+                "kurztext2": a.kurztext2 or "",
+                "einheit": a.einheit or "Stück",
+                "ek_preis": float(a.ekpreis) if a.ekpreis is not None else (float(a.listenpreis) if a.listenpreis is not None else 0.0),
+                "listenpreis": float(a.listenpreis) if a.listenpreis is not None else None,
+                "hat_ek": a.ekpreis is not None,
+                "lieferant": a.supplier.name if a.supplier else "",
+                "hersteller_artnr": a.hersteller_artnr_anzeige or "",
+            }
+            for a in treffer[:20]
+        ],
+    })
 
 
 def _angebot_an_lexoffice_senden_intern(doc):
@@ -2565,13 +2682,16 @@ def angebot_neu():
         titel=(f"Angebot – {vorauswahl_p.name}" if vorauswahl_p else "Angebot"),
     )
     return render_template("angebot_form.html", doc=vor_doc, projekte=projekte_liste, kontakte=kontakte_liste,
-                           von=pid_param, lex_hat_key=lex_hat_key, KOSTENARTEN=KOSTENARTEN, neu=True)
+                           von=pid_param, lex_hat_key=lex_hat_key, KOSTENARTEN=KOSTENARTEN, neu=True,
+                           item_teile_json=_item_teile_json)
 
 
 @main.route("/angebote/<int:did>/bearbeiten", methods=["GET", "POST"])
 @edit_required
 def angebot_bearbeiten(did):
-    doc = g.db.query(LexDocument).options(selectinload(LexDocument.items)).filter(LexDocument.id == did).first() or abort(404)
+    doc = g.db.query(LexDocument).options(
+        selectinload(LexDocument.items).selectinload(LexDocumentItem.parts)
+    ).filter(LexDocument.id == did).first() or abort(404)
     von = request.args.get("von", type=int) or doc.project_id
     if not doc.ist_lokal:
         flash("Dieses Angebot wurde bereits an Lexoffice übertragen und wird dort bearbeitet.", "fehler")
@@ -2634,7 +2754,8 @@ def angebot_bearbeiten(did):
         return redirect(url_for("main.lex_beleg_detail", did=doc.id, von=doc.project_id or von))
 
     return render_template("angebot_form.html", doc=doc, projekte=projekte_liste, kontakte=kontakte_liste,
-                           von=von, lex_hat_key=lex_hat_key, KOSTENARTEN=KOSTENARTEN, neu=False)
+                           von=von, lex_hat_key=lex_hat_key, KOSTENARTEN=KOSTENARTEN, neu=False,
+                           item_teile_json=_item_teile_json)
 
 
 @main.route("/angebote/<int:did>/lexoffice", methods=["POST"])

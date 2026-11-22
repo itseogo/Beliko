@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(HIER, ".."))
 sys.path.insert(0, HIER)
 
 from einkauf import create_app, einstellungen, lexoffice, security
-from einkauf.models import Contact, LexDocument
+from einkauf.models import Article, Contact, LexDocument, Supplier
 
 lexoffice.PAUSE = 0.0
 lexoffice._schlafen = lambda _s: None
@@ -95,9 +95,35 @@ h_proj = G("/projekte?p=1&tab=vorgang&status=alle")
 assert "+ Neues Angebot" in h_proj
 assert "/angebote/neu?p=1" in h_proj
 
-# 2. Lokales Angebot als Entwurf erstellen (2 Positionen)
+# 2. Lokales Angebot als Entwurf erstellen (2 Positionen, Pos. 1 mit 2 hinterlegten Artikeln / Stückliste)
 h_form = G("/angebote/neu?p=1")
 assert "Kunde Muster GmbH (Stuttgart) ✓ Lexoffice" in h_form
+assert "Pos." in h_form
+assert "📦 Artikel" in h_form
+
+# Test: Datanorm-Schnellsuche für Stückliste (/api/artikel/suche)
+with app.app_context():
+    with app.extensions["SessionLocal"]() as db_s:
+        s1 = Supplier(name="Fega&Schmidt", active=True)
+        db_s.add(s1)
+        db_s.flush()
+        db_s.add(Article(
+            artikelnr="120444", bezeichnung="SIEM Leitungsschutzschalter", kurztext2="5SY4116-6 B16A",
+            einheit="Stück", listenpreis=Decimal("12.90"), ekpreis=Decimal("2.81"),
+            hersteller="Siemens", hersteller_artnr="5SY4116-6", supplier_id=s1.id,
+        ))
+        db_s.commit()
+
+r_api = c.get("/api/artikel/suche?q=5sy4116").get_json()
+assert r_api["ok"] is True and len(r_api["artikel"]) == 1
+assert r_api["artikel"][0]["artikelnr"] == "120444"
+assert r_api["artikel"][0]["ek_preis"] == 2.81
+
+teile_pos1 = json.dumps([
+    {"artikelnr": "120444", "lieferant_name": "Fega&Schmidt", "bezeichnung": "SIEM LS B16A", "menge": 3, "einheit": "Stück", "ek_preis": 2.81, "vk_preis": 4.50},
+    {"artikelnr": "WB-11", "lieferant_name": "Fega&Schmidt", "bezeichnung": "Wallbox 11 kW", "menge": 1, "einheit": "Stück", "ek_preis": 680.00, "vk_preis": 836.50},
+])
+
 t = tok(h_form)
 h_neu = c.post("/angebote/neu?p=1", data={
     "_csrf": t,
@@ -117,6 +143,7 @@ h_neu = c.post("/angebote/neu?p=1", data={
     "pos_ep": ["850,00", "65,00"],
     "pos_rabatt": ["0", "10"],
     "pos_ka": ["material", "arbeit"],
+    "pos_teile": [teile_pos1, "[]"],
     "aktion": "entwurf",
 }, follow_redirects=True).get_data(as_text=True)
 
@@ -124,6 +151,8 @@ assert "Angebot als Entwurf in BeLiKo gespeichert" in h_neu
 assert "An Lexoffice senden" in h_neu
 assert "Wallbox 11 kW" in h_neu
 assert "850,00" in h_neu
+assert "2 hinterlegte Artikel" in h_neu
+assert "SIEM LS B16A" in h_neu
 
 with app.app_context():
     with app.extensions["SessionLocal"]() as db_s:

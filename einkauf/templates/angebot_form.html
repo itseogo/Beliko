@@ -1,6 +1,28 @@
 {% extends 'base.html' %}{% from '_m.html' import csrf with context %}
 {% block title %}{{ 'Neues Angebot erstellen' if neu else ('Angebot bearbeiten – ' ~ (doc.nummer or doc.titel or ('#' ~ doc.id))) }}{% endblock %}
 {% block content %}
+<style>
+  .teile-overlay {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.68);
+    display: none; align-items: center; justify-content: center;
+    z-index: 9999; padding: 1rem;
+  }
+  .teile-overlay.offen { display: flex; }
+  .teile-box {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    width: 100%; max-width: 920px; max-height: 90vh; overflow-y: auto;
+    padding: 1.3rem 1.5rem; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  }
+  .teile-suche-erg {
+    max-height: 210px; overflow-y: auto; border: 1px solid var(--line);
+    border-radius: 6px; margin-top: .4rem; display: none; background: var(--bg);
+  }
+  .teile-suche-erg.sichtbar { display: block; }
+  .teile-suche-erg table { margin: 0; font-size: .84rem; }
+  .teile-suche-erg td { padding: .35rem .5rem; }
+  .btn-teile-aktiv { border-color: var(--blue) !important; color: var(--blue) !important; font-weight: 600; }
+</style>
+
 <div class="kopf">
   <div>
     <h1>{{ 'Neues Angebot erstellen' if neu else 'Angebot bearbeiten' }}</h1>
@@ -67,21 +89,26 @@
     <table class="zeilen" id="pos-tabelle">
       <thead>
         <tr>
-          <th style="min-width:13rem">Bezeichnung *</th>
-          <th style="min-width:11rem">Beschreibung</th>
-          <th style="width:5.5rem" class="r">Menge</th>
-          <th style="width:5.5rem">Einheit</th>
-          <th style="width:7.5rem" class="r">EP netto (€)</th>
-          <th style="width:5rem" class="r">Rab. %</th>
-          <th style="width:9.5rem">Kostenart</th>
-          <th style="width:7rem" class="r">Gesamt netto</th>
+          <th style="width:3rem; text-align:center">Pos.</th>
+          <th style="min-width:12rem">Bezeichnung *</th>
+          <th style="min-width:10rem">Beschreibung</th>
+          <th style="width:5rem" class="r">Menge</th>
+          <th style="width:5rem">Einheit</th>
+          <th style="width:7rem" class="r">EP netto (€)</th>
+          <th style="width:4.5rem" class="r">Rab. %</th>
+          <th style="width:9rem">Kostenart</th>
+          <th style="width:6.5rem" class="r">Gesamt netto</th>
+          <th style="width:7.5rem">Artikel</th>
           <th style="width:2rem"></th>
         </tr>
       </thead>
       <tbody id="pos-body">
         {% set start_items = doc.items if doc.items else [none] %}
         {% for it in start_items %}
+        {% set t_json = item_teile_json(it) if it and item_teile_json else '[]' %}
+        {% set t_anz = it.parts|length if it and it.parts else 0 %}
         <tr class="pos-zeile">
+          <td class="p-nr" style="text-align:center; font-weight:600; color:var(--muted)">{{ loop.index }}</td>
           <td><input type="text" name="pos_bez" value="{{ it.bezeichnung if it else '' }}" placeholder="z. B. Wallbox 11 kW inkl. Montage" required></td>
           <td><input type="text" name="pos_beschr" value="{{ it.beschreibung if it and it.beschreibung else '' }}" placeholder="optional"></td>
           <td><input type="text" inputmode="decimal" name="pos_menge" class="r p-menge" value="{{ it.menge|qty if it and it.menge is not none else '1' }}"></td>
@@ -97,6 +124,12 @@
             </select>
           </td>
           <td class="r p-summe" style="font-variant-numeric:tabular-nums">0,00 €</td>
+          <td>
+            <input type="hidden" name="pos_teile" class="p-teile" value="{{ t_json }}">
+            <button type="button" class="btn sek klein p-teile-btn {{ 'btn-teile-aktiv' if t_anz else '' }}" title="Material / Artikel hinter dieser Position hinterlegen (interne Stückliste)" style="white-space:nowrap; padding:.2rem .5rem">
+              📦 Artikel{% if t_anz %} ({{ t_anz }}){% endif %}
+            </button>
+          </td>
           <td><button type="button" class="btn sek klein p-del" title="Zeile entfernen" style="padding:.15rem .45rem">✕</button></td>
         </tr>
         {% endfor %}
@@ -128,6 +161,67 @@
   </div>
 </form>
 
+<!-- Modal: Artikel / Stückliste hinter einer Position -->
+<div id="teile-modal" class="teile-overlay" role="dialog" aria-modal="true" aria-labelledby="teile-titel">
+  <div class="teile-box">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:.6rem">
+      <div>
+        <h2 id="teile-titel" style="margin:0; font-size:1.1rem">Artikel zu Position</h2>
+        <p class="meta" style="margin:.15rem 0 0">Interne Stückliste &amp; Kalkulation – wird in BeLiKo gespeichert und <b>nicht</b> einzeln an Lexoffice übertragen.</p>
+      </div>
+      <button type="button" id="teile-x" class="btn sek klein">✕</button>
+    </div>
+
+    <div style="margin-bottom:.9rem">
+      <label class="f" style="margin:0">
+        <span>Artikel aus dem Datanorm-Stamm suchen (Herst.-Nr., Artikelnr., EAN oder Bezeichnung)</span>
+        <input type="text" id="teile-suche" placeholder="z. B. 5sy4116 oder NYM-J 5x1,5 …" autocomplete="off">
+      </label>
+      <div id="teile-erg" class="teile-suche-erg"></div>
+    </div>
+
+    <div class="scroll">
+      <table class="zeilen" id="teile-tabelle" style="font-size:.86rem">
+        <thead>
+          <tr>
+            <th style="width:7rem">Art.-Nr.</th>
+            <th style="min-width:13rem">Bezeichnung</th>
+            <th style="width:7rem">Lieferant</th>
+            <th style="width:4.5rem" class="r">Menge</th>
+            <th style="width:4.5rem">Einheit</th>
+            <th style="width:6rem" class="r">EK netto (€)</th>
+            <th style="width:6rem" class="r">VK netto (€)</th>
+            <th style="width:6.5rem" class="r">Gesamt VK</th>
+            <th style="width:2rem"></th>
+          </tr>
+        </thead>
+        <tbody id="teile-body"></tbody>
+      </table>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.8rem; margin-top:.75rem">
+      <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap">
+        <button type="button" id="teile-frei-btn" class="btn sek klein">+ Freie Zeile</button>
+        <span class="meta" style="margin-left:.4rem">Aufschlag auf EK:</span>
+        <input type="text" inputmode="decimal" id="teile-aufschlag" value="25" style="width:3.8rem; padding:.22rem .4rem; text-align:right">
+        <span class="meta">%</span>
+        <button type="button" id="teile-aufschlag-btn" class="btn sek klein">Anwenden</button>
+      </div>
+      <div style="text-align:right; font-variant-numeric:tabular-nums">
+        <span class="meta">Summe EK: <b id="teile-sum-ek" style="color:var(--text)">0,00 €</b></span>
+        &nbsp;·&nbsp;
+        <span class="meta">Summe VK: <b id="teile-sum-vk" style="color:var(--blue)">0,00 €</b></span>
+      </div>
+    </div>
+
+    <div class="actions" style="margin-top:1.1rem; justify-content:flex-end; gap:.5rem">
+      <button type="button" id="teile-abbrechen" class="btn sek">Abbrechen</button>
+      <button type="button" id="teile-speichern" class="btn sek">💾 Artikel speichern</button>
+      <button type="button" id="teile-uebernehmen" class="btn">✓ Speichern &amp; VK-Summe als EP übernehmen</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   var body = document.getElementById("pos-body");
@@ -136,21 +230,44 @@
   var inpKunde = document.getElementById("inp-kunde");
   var inpMwst = document.getElementById("inp-mwst");
 
+  var modal = document.getElementById("teile-modal");
+  var teileTitel = document.getElementById("teile-titel");
+  var teileBody = document.getElementById("teile-body");
+  var teileSuche = document.getElementById("teile-suche");
+  var teileErg = document.getElementById("teile-erg");
+  var aktiveZeile = null;
+  var suchTimer = null;
+
   function parseDe(v) {
-    if (!v) return 0;
-    var s = String(v).trim().replace(/\./g, "").replace(",", ".");
+    if (v === null || v === undefined || v === "") return 0;
+    var s = String(v).trim();
+    if (s.indexOf(",") >= 0) s = s.replace(/\./g, "").replace(",", ".");
     var n = parseFloat(s);
     return isNaN(n) ? 0 : n;
   }
 
+  function fmtDe(n, dec) {
+    return Number(n || 0).toFixed(dec === undefined ? 2 : dec).replace(".", ",");
+  }
+
   function fmtEur(n) {
-    return n.toFixed(2).replace(".", ",") + " €";
+    return fmtDe(n, 2) + " €";
+  }
+
+  function escHtml(s) {
+    return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function nummerieren() {
+    body.querySelectorAll("tr.pos-zeile").forEach(function (tr, i) {
+      var nr = tr.querySelector(".p-nr");
+      if (nr) nr.textContent = String(i + 1);
+    });
   }
 
   function neuRechnen() {
     var netto = 0;
-    var zeilen = body.querySelectorAll("tr.pos-zeile");
-    zeilen.forEach(function (tr) {
+    body.querySelectorAll("tr.pos-zeile").forEach(function (tr) {
       var m = parseDe(tr.querySelector(".p-menge").value);
       var ep = parseDe(tr.querySelector(".p-ep").value);
       var rab = Math.max(0, Math.min(100, parseDe(tr.querySelector(".p-rab").value)));
@@ -166,16 +283,195 @@
     document.getElementById("sum-brutto").textContent = fmtEur(netto + mwst);
   }
 
+  // ---- Stücklisten-Modal ----
+  function teileNeuRechnen() {
+    var sumEk = 0, sumVk = 0;
+    teileBody.querySelectorAll("tr.t-zeile").forEach(function (tr) {
+      var m = parseDe(tr.querySelector(".t-menge").value);
+      var ek = parseDe(tr.querySelector(".t-ek").value);
+      var vk = parseDe(tr.querySelector(".t-vk").value);
+      sumEk += m * ek;
+      sumVk += m * vk;
+      tr.querySelector(".t-gvk").textContent = fmtEur(m * vk);
+    });
+    document.getElementById("teile-sum-ek").textContent = fmtEur(sumEk);
+    document.getElementById("teile-sum-vk").textContent = fmtEur(sumVk);
+    return { ek: sumEk, vk: sumVk };
+  }
+
+  function teilZeileAnfuegen(t) {
+    var tr = document.createElement("tr");
+    tr.className = "t-zeile";
+    tr.dataset.artId = t.article_id || "";
+    var ekVal = (t.ek_preis !== null && t.ek_preis !== undefined && t.ek_preis !== "") ? fmtDe(t.ek_preis, 2) : "";
+    var vkVal = (t.vk_preis !== null && t.vk_preis !== undefined && t.vk_preis !== "") ? fmtDe(t.vk_preis, 2) : ekVal;
+    tr.innerHTML =
+      '<td><input type="text" class="t-artnr" value="' + escHtml(t.artikelnr || "") + '" placeholder="optional"></td>' +
+      '<td><input type="text" class="t-bez" value="' + escHtml(t.bezeichnung || "") + '" placeholder="Bezeichnung"></td>' +
+      '<td><input type="text" class="t-lief" value="' + escHtml(t.lieferant_name || "") + '" placeholder="optional"></td>' +
+      '<td><input type="text" inputmode="decimal" class="r t-menge" value="' + escHtml(t.menge !== undefined ? String(t.menge).replace(".", ",") : "1") + '"></td>' +
+      '<td><input type="text" class="t-einh" value="' + escHtml(t.einheit || "Stück") + '"></td>' +
+      '<td><input type="text" inputmode="decimal" class="r t-ek" value="' + escHtml(ekVal) + '" placeholder="0,00"></td>' +
+      '<td><input type="text" inputmode="decimal" class="r t-vk" value="' + escHtml(vkVal) + '" placeholder="0,00"></td>' +
+      '<td class="r t-gvk" style="font-variant-numeric:tabular-nums">0,00 €</td>' +
+      '<td><button type="button" class="btn sek klein t-del" style="padding:.15rem .4rem">✕</button></td>';
+    tr.querySelectorAll(".t-menge, .t-ek, .t-vk").forEach(function (inp) {
+      inp.addEventListener("input", teileNeuRechnen);
+    });
+    tr.querySelector(".t-del").addEventListener("click", function () {
+      tr.remove();
+      teileNeuRechnen();
+    });
+    teileBody.appendChild(tr);
+    teileNeuRechnen();
+  }
+
+  function teileOeffnen(tr) {
+    aktiveZeile = tr;
+    var posNr = tr.querySelector(".p-nr").textContent;
+    var posBez = tr.querySelector('input[name="pos_bez"]').value.trim();
+    teileTitel.textContent = "Pos. " + posNr + (posBez ? " – " + posBez : "") + " · Hinterlegte Artikel";
+    teileBody.innerHTML = "";
+    teileSuche.value = "";
+    teileErg.innerHTML = "";
+    teileErg.classList.remove("sichtbar");
+
+    var liste = [];
+    try { liste = JSON.parse(tr.querySelector(".p-teile").value || "[]"); } catch (e) { liste = []; }
+    liste.forEach(teilZeileAnfuegen);
+    teileNeuRechnen();
+    modal.classList.add("offen");
+    teileSuche.focus();
+  }
+
+  function teileAusModalLesen() {
+    var erg = [];
+    teileBody.querySelectorAll("tr.t-zeile").forEach(function (tr) {
+      var bez = tr.querySelector(".t-bez").value.trim();
+      if (!bez) return;
+      erg.push({
+        article_id: tr.dataset.artId ? parseInt(tr.dataset.artId, 10) : null,
+        artikelnr: tr.querySelector(".t-artnr").value.trim(),
+        lieferant_name: tr.querySelector(".t-lief").value.trim(),
+        bezeichnung: bez,
+        menge: parseDe(tr.querySelector(".t-menge").value) || 1,
+        einheit: tr.querySelector(".t-einh").value.trim() || "Stück",
+        ek_preis: tr.querySelector(".t-ek").value.trim() !== "" ? parseDe(tr.querySelector(".t-ek").value) : null,
+        vk_preis: tr.querySelector(".t-vk").value.trim() !== "" ? parseDe(tr.querySelector(".t-vk").value) : null
+      });
+    });
+    return erg;
+  }
+
+  function teileSpeichern(alsEpUebernehmen) {
+    if (!aktiveZeile) return;
+    var liste = teileAusModalLesen();
+    aktiveZeile.querySelector(".p-teile").value = JSON.stringify(liste);
+    var btn = aktiveZeile.querySelector(".p-teile-btn");
+    btn.textContent = liste.length ? ("📦 Artikel (" + liste.length + ")") : "📦 Artikel";
+    btn.classList.toggle("btn-teile-aktiv", liste.length > 0);
+
+    if (alsEpUebernehmen) {
+      var summen = teileNeuRechnen();
+      aktiveZeile.querySelector(".p-ep").value = fmtDe(summen.vk, 2);
+      neuRechnen();
+    }
+    modal.classList.remove("offen");
+  }
+
+  document.getElementById("teile-x").addEventListener("click", function () { modal.classList.remove("offen"); });
+  document.getElementById("teile-abbrechen").addEventListener("click", function () { modal.classList.remove("offen"); });
+  document.getElementById("teile-speichern").addEventListener("click", function () { teileSpeichern(false); });
+  document.getElementById("teile-uebernehmen").addEventListener("click", function () { teileSpeichern(true); });
+  document.getElementById("teile-frei-btn").addEventListener("click", function () {
+    teilZeileAnfuegen({ artikelnr: "", bezeichnung: "", lieferant_name: "", menge: 1, einheit: "Stück", ek_preis: "", vk_preis: "" });
+  });
+  document.getElementById("teile-aufschlag-btn").addEventListener("click", function () {
+    var pct = parseDe(document.getElementById("teile-aufschlag").value);
+    var faktor = 1 + (pct / 100);
+    teileBody.querySelectorAll("tr.t-zeile").forEach(function (tr) {
+      var ek = parseDe(tr.querySelector(".t-ek").value);
+      if (ek > 0) tr.querySelector(".t-vk").value = fmtDe(ek * faktor, 2);
+    });
+    teileNeuRechnen();
+  });
+
+  teileSuche.addEventListener("input", function () {
+    var q = teileSuche.value.trim();
+    if (suchTimer) clearTimeout(suchTimer);
+    if (q.length < 2) {
+      teileErg.classList.remove("sichtbar");
+      teileErg.innerHTML = "";
+      return;
+    }
+    suchTimer = setTimeout(function () {
+      fetch("{{ url_for('main.api_artikel_suche') }}?q=" + encodeURIComponent(q), { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data || !data.artikel || !data.artikel.length) {
+            teileErg.innerHTML = '<p class="meta" style="padding:.5rem .7rem; margin:0">Keine passenden Artikel im Datanorm-Stamm gefunden.</p>';
+            teileErg.classList.add("sichtbar");
+            return;
+          }
+          var pct = parseDe(document.getElementById("teile-aufschlag").value);
+          var faktor = 1 + (pct / 100);
+          var html = '<table><tbody>';
+          data.artikel.forEach(function (a, i) {
+            var preisTxt = fmtEur(a.ek_preis) + (a.hat_ek ? " (EK)" : " (Liste)");
+            html += '<tr>' +
+              '<td><b>' + escHtml(a.artikelnr) + '</b>' + (a.hersteller_artnr ? '<br><small class="sub">' + escHtml(a.hersteller_artnr) + '</small>' : '') + '</td>' +
+              '<td>' + escHtml(a.bezeichnung) + (a.kurztext2 ? '<br><small class="sub">' + escHtml(a.kurztext2) + '</small>' : '') + '</td>' +
+              '<td>' + escHtml(a.lieferant) + '</td>' +
+              '<td class="r" style="white-space:nowrap">' + preisTxt + '</td>' +
+              '<td class="r"><button type="button" class="btn sek klein t-add-art" data-idx="' + i + '">+ Übernehmen</button></td>' +
+              '</tr>';
+          });
+          html += '</tbody></table>';
+          teileErg.innerHTML = html;
+          teileErg.classList.add("sichtbar");
+          teileErg.querySelectorAll(".t-add-art").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+              var a = data.artikel[parseInt(btn.dataset.idx, 10)];
+              var bez = a.bezeichnung + (a.kurztext2 ? " – " + a.kurztext2 : "");
+              teilZeileAnfuegen({
+                article_id: a.id,
+                artikelnr: a.artikelnr,
+                lieferant_name: a.lieferant,
+                bezeichnung: bez,
+                menge: 1,
+                einheit: a.einheit || "Stück",
+                ek_preis: a.ek_preis,
+                vk_preis: a.ek_preis > 0 ? +(a.ek_preis * faktor).toFixed(2) : 0
+              });
+            });
+          });
+        })
+        .catch(function () {});
+    }, 250);
+  });
+
+  // ---- Hauptzeilen ----
   function zeileBinden(tr) {
     tr.querySelectorAll(".p-menge, .p-ep, .p-rab").forEach(function (inp) {
       inp.addEventListener("input", neuRechnen);
     });
+    tr.querySelector(".p-teile-btn").addEventListener("click", function () {
+      teileOeffnen(tr);
+    });
     tr.querySelector(".p-del").addEventListener("click", function () {
       if (body.querySelectorAll("tr.pos-zeile").length > 1) {
         tr.remove();
+        nummerieren();
         neuRechnen();
       } else {
-        tr.querySelectorAll("input").forEach(function (i) { i.value = i.classList.contains("p-menge") ? "1" : ""; });
+        tr.querySelectorAll("input").forEach(function (i) {
+          if (i.classList.contains("p-menge")) i.value = "1";
+          else if (i.classList.contains("p-teile")) i.value = "[]";
+          else i.value = "";
+        });
+        var tb = tr.querySelector(".p-teile-btn");
+        tb.textContent = "📦 Artikel";
+        tb.classList.remove("btn-teile-aktiv");
         neuRechnen();
       }
     });
@@ -190,11 +486,16 @@
     neu.querySelectorAll("input").forEach(function (i) {
       if (i.name === "pos_menge") i.value = "1";
       else if (i.name === "pos_einheit") i.value = "Stück";
+      else if (i.name === "pos_teile") i.value = "[]";
       else i.value = "";
     });
+    var tb = neu.querySelector(".p-teile-btn");
+    tb.textContent = "📦 Artikel";
+    tb.classList.remove("btn-teile-aktiv");
     neu.querySelector(".p-summe").textContent = "0,00 €";
     body.appendChild(neu);
     zeileBinden(neu);
+    nummerieren();
     neu.querySelector('input[name="pos_bez"]').focus();
   });
 
@@ -205,6 +506,7 @@
     });
   }
 
+  nummerieren();
   neuRechnen();
 })();
 </script>

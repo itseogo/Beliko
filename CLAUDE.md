@@ -4,7 +4,7 @@ Diese Datei gehört zum Projekt und wird bei **jeder Änderung** mit aktualisier
 damit in einem neuen Chat nahtlos weitergearbeitet werden kann). In einem neuen Chat: `beliko.zip`
 hochladen (enthält diese Datei) und sagen „lies die CLAUDE.md und mach weiter“.
 
-**Stand: Version 1.4.0 · Datenbank-Schemaversion 18**
+**Stand: Version 1.4.1 · Datenbank-Schemaversion 19**
 
 **Name:** Der Auftraggeber nennt das Tool **BeLiKo** (BestellLieferKontrolle). Sichtbar überall als BeLiKo; intern bleiben Paket `einkauf`, Ordner `einkauf-data` und der Dienstname `einkauf` (damit bestehende Installationen weiterlaufen). Auslieferung: `beliko.zip`.
 
@@ -281,6 +281,14 @@ Echte Dateien des Lieferanten nicht ins Paket legen; `tests/make_ugl.py` baut ei
 - Spalten in bestehenden Datenbanken nur über `_spalten_ergaenzen` nachziehen (siehe Abschnitt 4).
 
 ## 10. Versionsverlauf
+- **1.4.1**
+  - **Angebotspositionen: Pos.-Nummer & interne Stückliste / hinterlegte Artikel je Position (Schema 19):**
+    - In der Angebotsmaske (`/angebote/neu`, `/angebote/<id>/bearbeiten`) gibt es jetzt vorne die automatische Spalte **`Pos.`** (`1`, `2`, `3`, …) sowie in jeder Zeile den Button **`📦 Artikel`** (zeigt die Anzahl hinterlegter Artikel, z. B. `📦 Artikel (4)`).
+    - Klick auf **`📦 Artikel`** öffnet ein Stücklisten-Fenster für diese Position:
+      - Schnelle Live-Suche im Datanorm-Artikelstamm (`GET /api/artikel/suche`) mit Übernahme von Artikelnr., Lieferant, Einheit und „Mein Preis“ (EK).
+      - Freie Zeilen ergänzbar (`+ Freie Zeile`), konfigurierbarer Aufschlag in % (`EK → VK`), Live-Summe EK & VK.
+      - Zwei Speicher-Optionen: **„💾 Artikel speichern“** oder **„✓ Speichern & VK-Summe als EP übernehmen“**.
+    - Die hinterlegten Artikel werden in der neuen Tabelle `lex_document_item_parts` (Schema 19) gespeichert, in der Angebotsdetailansicht (`/lexoffice/belege/<id>`) aufklappbar unter jeder Position mit EK-/VK-Summe angezeigt und bleiben intern in BeLiKo (an Lexoffice wird weiterhin nur die saubere Kunden-Position übertragen).
 - **1.4.0**
   - **Angebote direkt im Projekt erstellen & an Lexoffice senden (Schema 18):**
     - Im Projekt-Vorgang (`/projekte`, Block **„Angebot“**) gibt es jetzt oben rechts den Button **„+ Neues Angebot“** (analog zu „+ Neue Bestellung“).

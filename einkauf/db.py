@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from . import config
 from .models import Base, Meta, NumberRange, Order
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 
 def _spalten_ergaenzen(engine, tabelle, spalten):
