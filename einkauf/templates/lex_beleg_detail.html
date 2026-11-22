@@ -10,10 +10,27 @@
     </p>
   </div>
   <div class="actions">
+    {% if doc.ist_lokal and g.user.role != 'leser' %}
+      <a class="btn sek" href="{{ url_for('main.angebot_bearbeiten', did=doc.id, von=von) }}">✏️ Bearbeiten</a>
+      <form method="post" action="{{ url_for('main.angebot_an_lexoffice', did=doc.id, von=von) }}" style="display:inline" onsubmit="return confirm('Dieses Angebot jetzt als Entwurf an Lexoffice senden?')">
+        {{ csrf() }}
+        <button class="btn">📤 An Lexoffice senden</button>
+      </form>
+      <form method="post" action="{{ url_for('main.angebot_loeschen', did=doc.id) }}" style="display:inline" onsubmit="return confirm('Lokales Angebot wirklich löschen?')">
+        {{ csrf() }}
+        <button class="btn sek" style="color:var(--err, #ef4444)" title="Lokales Angebot löschen">🗑️ Löschen</button>
+      </form>
+    {% endif %}
     {% if von %}<a class="btn sek" href="{{ url_for('main.sperre_verlassen', obj_typ='lex_beleg', obj_id=doc.id, weiter=url_for('main.projekte', p=von, tab='vorgang', status='alle')) }}">Zurück zum Projekt</a>{% endif %}
     <a class="btn sek" href="{{ url_for('main.sperre_verlassen', obj_typ='lex_beleg', obj_id=doc.id, weiter=url_for('main.lex_belege')) }}">Alle Belege</a>
   </div>
 </div>
+
+{% if doc.ist_lokal %}
+<div class="flash ok" style="margin-bottom:1rem">
+  Dieses Angebot ist bisher nur lokal in BeLiKo gespeichert. Du kannst es noch bearbeiten oder über <b>„📤 An Lexoffice senden“</b> als Entwurf nach Lexoffice übertragen – dort lässt es sich direkt an den Kunden versenden und mit einem Klick in eine <b>Rechnung</b> weiterführen.
+</div>
+{% endif %}
 
 <div class="kpis">
   <div class="kpi"><b>{{ doc.netto|money if doc.netto is not none else '–' }}</b><span>Gesamt (netto)</span></div>

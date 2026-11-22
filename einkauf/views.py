@@ -54,7 +54,8 @@ BELEG_TYPEN = {
     "eingangsrechnung": "Eingangsrechnung",
 }
 BELEG_STATUS = {
-    "draft": "Entwurf", "open": "Offen", "accepted": "Angenommen", "rejected": "Abgelehnt",
+    "lokal": "Entwurf (lokal)",
+    "draft": "Entwurf (Lexoffice)", "open": "Offen", "accepted": "Angenommen", "rejected": "Abgelehnt",
     "paid": "Bezahlt", "paidoff": "Bezahlt", "overdue": "Überfällig", "voided": "Storniert",
 }
 MONATE = ["", "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August",
@@ -2392,9 +2393,279 @@ def lex_beleg_detail(did):
 
     projekte_liste = g.db.query(Project).order_by(Project.nummer).all()
     von = request.args.get("von", type=int)
+    lex_hat_key = bool(einstellungen.lesen(g.db, "lex_key_enc"))
     return render_template("lex_beleg_detail.html", doc=doc, projekte=projekte_liste, von=von,
+                           lex_hat_key=lex_hat_key,
                            gesperrt_von=gesperrt_von, sperre_text=(sperre.meldung("lex_beleg", gesperrt_von) if gesperrt_von else None),
                            BELEG_TYPEN=BELEG_TYPEN, BELEG_STATUS=BELEG_STATUS, KOSTENARTEN=KOSTENARTEN)
+
+
+def _angebot_positionen_aus_formular(doc):
+    """Liest Angebotspositionen aus request.form in doc.items ein und berechnet Netto/Brutto."""
+    bez_l = request.form.getlist("pos_bez")
+    beschr_l = request.form.getlist("pos_beschr")
+    menge_l = request.form.getlist("pos_menge")
+    einh_l = request.form.getlist("pos_einheit")
+    ep_l = request.form.getlist("pos_ep")
+    rab_l = request.form.getlist("pos_rabatt")
+    ka_l = request.form.getlist("pos_ka")
+
+    doc.items.clear()
+    netto_sum = Decimal("0.00")
+    pos_nr = 0
+    for idx in range(len(bez_l)):
+        bez = (bez_l[idx] or "").strip()
+        if not bez:
+            continue
+        pos_nr += 1
+        beschr = (beschr_l[idx] if idx < len(beschr_l) else "").strip() or None
+        menge = dec(menge_l[idx] if idx < len(menge_l) else "1")
+        if menge is None or menge <= 0:
+            menge = Decimal("1")
+        einh = ((einh_l[idx] if idx < len(einh_l) else "") or "Stück").strip()[:30]
+        ep = dec(ep_l[idx] if idx < len(ep_l) else "0")
+        if ep is None:
+            ep = Decimal("0.00")
+        rab = dec(rab_l[idx] if idx < len(rab_l) else "0")
+        if rab is None or rab < 0:
+            rab = Decimal("0")
+        if rab > 100:
+            rab = Decimal("100")
+        ka = (ka_l[idx] if idx < len(ka_l) else "material").strip()
+        if ka not in ("material", "pauschale", "fremdleistung", "arbeit"):
+            ka = "material"
+        anteil = Decimal("100.00") if ka == "material" else (Decimal("50.00") if ka == "pauschale" else Decimal("0.00"))
+        faktor = (Decimal("100") - rab) / Decimal("100")
+        gesamt = (menge * ep * faktor).quantize(Decimal("0.01"))
+        netto_sum += gesamt
+        doc.items.append(LexDocumentItem(
+            position=pos_nr,
+            lex_typ="custom",
+            bezeichnung=bez[:300],
+            beschreibung=beschr,
+            menge=menge,
+            einheit=einh,
+            einzelpreis_netto=ep.quantize(Decimal("0.0001")),
+            rabatt_prozent=rab if rab > 0 else None,
+            gesamt_netto=gesamt,
+            kostenart=ka,
+            materialanteil=anteil,
+        ))
+
+    mwst = doc.mwst_satz if doc.mwst_satz is not None else Decimal("19.00")
+    doc.netto = netto_sum.quantize(Decimal("0.01"))
+    doc.brutto = (doc.netto * (Decimal("100") + mwst) / Decimal("100")).quantize(Decimal("0.01"))
+    return pos_nr
+
+
+def _angebot_an_lexoffice_senden_intern(doc):
+    """Hilfsfunktion: sendet lokales Angebot als Entwurf an Lexoffice und aktualisiert den Datensatz."""
+    basis, key = _lex_zugang()
+    if not key:
+        raise lexoffice.LexFehler("Es ist noch kein Lexoffice-API-Schlüssel hinterlegt (siehe Einstellungen → Lexoffice).")
+    contact = g.db.get(Contact, doc.contact_id) if doc.contact_id else None
+    resp, detail = lexoffice.angebot_erstellen(basis, key, doc, contact=contact)
+    doc.lexoffice_id = resp["id"]
+    doc.lexoffice_version = resp.get("version") or (detail.get("version") if detail else 1)
+    if detail:
+        if detail.get("voucherNumber"):
+            doc.nummer = str(detail["voucherNumber"])[:60]
+        doc.status = str(detail.get("voucherStatus") or "draft")[:30]
+        if detail.get("updatedDate"):
+            doc.updated_at_lex = str(detail["updatedDate"])[:40]
+    else:
+        doc.status = "draft"
+    doc.letzter_sync = datetime.now()
+    doc.version = (doc.version or 1) + 1
+
+
+@main.route("/angebote/neu", methods=["GET", "POST"])
+@edit_required
+def angebot_neu():
+    pid_param = request.args.get("p", type=int)
+    vorauswahl_p = g.db.get(Project, pid_param) if pid_param else None
+    projekte_liste = g.db.query(Project).order_by(Project.nummer.desc()).all()
+    kontakte_liste = g.db.query(Contact).filter(Contact.archiviert.is_(False), Contact.ist_kunde.is_(True)).order_by(Contact.firma, Contact.nachname).all()
+    lex_hat_key = bool(einstellungen.lesen(g.db, "lex_key_enc"))
+
+    if request.method == "POST":
+        pid = request.form.get("project_id", type=int)
+        pr = g.db.get(Project, pid) if pid else None
+        cid = request.form.get("contact_id", type=int)
+        kontakt = g.db.get(Contact, cid) if cid else None
+        kunde_name = (request.form.get("kunde_name") or "").strip()[:200]
+        if kontakt and not kunde_name:
+            kunde_name = kontakt.anzeigename[:200]
+        datum_val = parse_date(request.form.get("datum")) or date.today()
+        gueltig_val = parse_date(request.form.get("gueltig_bis")) or (datum_val + timedelta(days=30))
+        mwst_val = dec(request.form.get("mwst_satz"))
+        if mwst_val is None or mwst_val < 0 or mwst_val > 100:
+            mwst_val = Decimal("19.00")
+        titel = (request.form.get("titel") or "").strip()[:300] or "Angebot"
+        nummer = (request.form.get("nummer") or "").strip()[:60] or None
+        einleitung = (request.form.get("einleitung") or "").strip() or None
+        schlusstext = (request.form.get("schlusstext") or "").strip() or None
+        sofort_senden = request.form.get("aktion") == "lexoffice"
+
+        doc = LexDocument(
+            lexoffice_id=f"lokal-{secrets.token_hex(8)}",
+            typ="angebot",
+            nummer=nummer,
+            datum=datum_val,
+            gueltig_bis=gueltig_val,
+            status="lokal",
+            contact_id=kontakt.id if kontakt else None,
+            contact_lex_id=kontakt.lexoffice_id if kontakt else None,
+            kunde_name=kunde_name or None,
+            titel=titel,
+            einleitung=einleitung,
+            schlusstext=schlusstext,
+            mwst_satz=mwst_val,
+            waehrung="EUR",
+            project_id=pr.id if pr else None,
+        )
+        anz_pos = _angebot_positionen_aus_formular(doc)
+        if anz_pos == 0:
+            flash("Bitte mindestens eine Position mit Bezeichnung angeben.", "fehler")
+            return render_template("angebot_form.html", doc=doc, projekte=projekte_liste, kontakte=kontakte_liste,
+                                   von=pid or pid_param, lex_hat_key=lex_hat_key, KOSTENARTEN=KOSTENARTEN, neu=True)
+
+        g.db.add(doc)
+        g.db.flush()
+        protokoll("angelegt", "lex_beleg", doc.id, doc.nummer or doc.titel, details="Lokales Angebot erstellt")
+
+        if sofort_senden:
+            try:
+                _angebot_an_lexoffice_senden_intern(doc)
+                protokoll("sync", "lex_beleg", doc.id, doc.nummer or doc.titel, details="Angebot als Entwurf an Lexoffice gesendet")
+                g.db.commit()
+                flash("Angebot gespeichert und als Entwurf an Lexoffice gesendet! In Lexoffice kannst du es prüfen, versenden und direkt in eine Rechnung weiterführen.", "ok")
+            except lexoffice.LexFehler as e:
+                g.db.commit()
+                flash(f"Angebot lokal in BeLiKo gespeichert, aber Übertragung an Lexoffice fehlgeschlagen: {e}", "fehler")
+        else:
+            g.db.commit()
+            flash("Angebot als Entwurf in BeLiKo gespeichert. Du kannst es jederzeit bearbeiten oder an Lexoffice senden.", "ok")
+
+        return redirect(url_for("main.lex_beleg_detail", did=doc.id, von=doc.project_id))
+
+    heute = date.today()
+    vor_doc = LexDocument(
+        lexoffice_id="lokal-neu",
+        typ="angebot",
+        datum=heute,
+        gueltig_bis=heute + timedelta(days=30),
+        mwst_satz=Decimal("19.00"),
+        project_id=vorauswahl_p.id if vorauswahl_p else None,
+        contact_id=vorauswahl_p.contact_id if vorauswahl_p else None,
+        kunde_name=(vorauswahl_p.contact.anzeigename if (vorauswahl_p and vorauswahl_p.contact) else (vorauswahl_p.kunde if vorauswahl_p else "")),
+        titel=(f"Angebot – {vorauswahl_p.name}" if vorauswahl_p else "Angebot"),
+    )
+    return render_template("angebot_form.html", doc=vor_doc, projekte=projekte_liste, kontakte=kontakte_liste,
+                           von=pid_param, lex_hat_key=lex_hat_key, KOSTENARTEN=KOSTENARTEN, neu=True)
+
+
+@main.route("/angebote/<int:did>/bearbeiten", methods=["GET", "POST"])
+@edit_required
+def angebot_bearbeiten(did):
+    doc = g.db.query(LexDocument).options(selectinload(LexDocument.items)).filter(LexDocument.id == did).first() or abort(404)
+    von = request.args.get("von", type=int) or doc.project_id
+    if not doc.ist_lokal:
+        flash("Dieses Angebot wurde bereits an Lexoffice übertragen und wird dort bearbeitet.", "fehler")
+        return redirect(url_for("main.lex_beleg_detail", did=doc.id, von=von))
+
+    projekte_liste = g.db.query(Project).order_by(Project.nummer.desc()).all()
+    kontakte_liste = g.db.query(Contact).filter(Contact.archiviert.is_(False), Contact.ist_kunde.is_(True)).order_by(Contact.firma, Contact.nachname).all()
+    lex_hat_key = bool(einstellungen.lesen(g.db, "lex_key_enc"))
+
+    if request.method == "POST":
+        pid = request.form.get("project_id", type=int)
+        pr = g.db.get(Project, pid) if pid else None
+        cid = request.form.get("contact_id", type=int)
+        kontakt = g.db.get(Contact, cid) if cid else None
+        kunde_name = (request.form.get("kunde_name") or "").strip()[:200]
+        if kontakt and not kunde_name:
+            kunde_name = kontakt.anzeigename[:200]
+        datum_val = parse_date(request.form.get("datum")) or doc.datum or date.today()
+        gueltig_val = parse_date(request.form.get("gueltig_bis")) or (datum_val + timedelta(days=30))
+        mwst_val = dec(request.form.get("mwst_satz"))
+        if mwst_val is None or mwst_val < 0 or mwst_val > 100:
+            mwst_val = Decimal("19.00")
+
+        doc.project_id = pr.id if pr else None
+        doc.contact_id = kontakt.id if kontakt else None
+        doc.contact_lex_id = kontakt.lexoffice_id if kontakt else None
+        doc.kunde_name = kunde_name or None
+        doc.datum = datum_val
+        doc.gueltig_bis = gueltig_val
+        doc.mwst_satz = mwst_val
+        doc.titel = (request.form.get("titel") or "").strip()[:300] or "Angebot"
+        doc.nummer = (request.form.get("nummer") or "").strip()[:60] or None
+        doc.einleitung = (request.form.get("einleitung") or "").strip() or None
+        doc.schlusstext = (request.form.get("schlusstext") or "").strip() or None
+
+        anz_pos = _angebot_positionen_aus_formular(doc)
+        if anz_pos == 0:
+            g.db.rollback()
+            flash("Bitte mindestens eine Position mit Bezeichnung angeben.", "fehler")
+            return redirect(url_for("main.angebot_bearbeiten", did=doc.id, von=von))
+
+        doc.version = (doc.version or 1) + 1
+        sofort_senden = request.form.get("aktion") == "lexoffice"
+        if sofort_senden:
+            try:
+                _angebot_an_lexoffice_senden_intern(doc)
+                protokoll("sync", "lex_beleg", doc.id, doc.nummer or doc.titel, details="Angebot als Entwurf an Lexoffice gesendet")
+                g.db.commit()
+                flash("Angebot gespeichert und als Entwurf an Lexoffice gesendet! In Lexoffice kannst du es prüfen, versenden und direkt in eine Rechnung weiterführen.", "ok")
+            except lexoffice.LexFehler as e:
+                g.db.commit()
+                flash(f"Änderungen gespeichert, aber Übertragung an Lexoffice fehlgeschlagen: {e}", "fehler")
+        else:
+            protokoll("geaendert", "lex_beleg", doc.id, doc.nummer or doc.titel)
+            g.db.commit()
+            flash("Angebot gespeichert.", "ok")
+        return redirect(url_for("main.lex_beleg_detail", did=doc.id, von=doc.project_id or von))
+
+    return render_template("angebot_form.html", doc=doc, projekte=projekte_liste, kontakte=kontakte_liste,
+                           von=von, lex_hat_key=lex_hat_key, KOSTENARTEN=KOSTENARTEN, neu=False)
+
+
+@main.route("/angebote/<int:did>/lexoffice", methods=["POST"])
+@edit_required
+def angebot_an_lexoffice(did):
+    doc = g.db.query(LexDocument).options(selectinload(LexDocument.items)).filter(LexDocument.id == did).first() or abort(404)
+    von = request.args.get("von", type=int) or doc.project_id
+    if not doc.ist_lokal:
+        flash("Dieses Angebot wurde bereits an Lexoffice übertragen.", "fehler")
+        return redirect(url_for("main.lex_beleg_detail", did=doc.id, von=von))
+    try:
+        _angebot_an_lexoffice_senden_intern(doc)
+        protokoll("sync", "lex_beleg", doc.id, doc.nummer or doc.titel, details="Angebot als Entwurf an Lexoffice gesendet")
+        g.db.commit()
+        flash("Angebot wurde als Entwurf an Lexoffice übertragen! In Lexoffice kannst du es jetzt prüfen, versenden und direkt in eine Rechnung weiterführen.", "ok")
+    except lexoffice.LexFehler as e:
+        g.db.rollback()
+        flash(f"Übertragung an Lexoffice fehlgeschlagen: {e}", "fehler")
+    return redirect(url_for("main.lex_beleg_detail", did=doc.id, von=von))
+
+
+@main.route("/angebote/<int:did>/loeschen", methods=["POST"])
+@edit_required
+def angebot_loeschen(did):
+    doc = g.db.get(LexDocument, did) or abort(404)
+    pid = doc.project_id
+    if not doc.ist_lokal:
+        flash("Bereits mit Lexoffice verknüpfte Belege können hier nicht gelöscht werden.", "fehler")
+        return redirect(url_for("main.lex_beleg_detail", did=doc.id, von=pid))
+    name = doc.nummer or doc.titel or f"Angebot #{doc.id}"
+    g.db.delete(doc)
+    protokoll("geloescht", "lex_beleg", did, name)
+    g.db.commit()
+    flash(f"Lokales Angebot „{name}“ gelöscht.", "ok")
+    if pid:
+        return redirect(url_for("main.projekte", p=pid, tab="vorgang", status="alle"))
+    return redirect(url_for("main.lex_belege"))
 
 
 # ------------------------------------------------- Sperren, Protokoll, Sicherung, Artikel, Rechnungen

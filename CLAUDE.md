@@ -4,7 +4,7 @@ Diese Datei gehört zum Projekt und wird bei **jeder Änderung** mit aktualisier
 damit in einem neuen Chat nahtlos weitergearbeitet werden kann). In einem neuen Chat: `beliko.zip`
 hochladen (enthält diese Datei) und sagen „lies die CLAUDE.md und mach weiter“.
 
-**Stand: Version 1.3.4 · Datenbank-Schemaversion 17**
+**Stand: Version 1.4.0 · Datenbank-Schemaversion 18**
 
 **Name:** Der Auftraggeber nennt das Tool **BeLiKo** (BestellLieferKontrolle). Sichtbar überall als BeLiKo; intern bleiben Paket `einkauf`, Ordner `einkauf-data` und der Dienstname `einkauf` (damit bestehende Installationen weiterlaufen). Auslieferung: `beliko.zip`.
 
@@ -281,6 +281,15 @@ Echte Dateien des Lieferanten nicht ins Paket legen; `tests/make_ugl.py` baut ei
 - Spalten in bestehenden Datenbanken nur über `_spalten_ergaenzen` nachziehen (siehe Abschnitt 4).
 
 ## 10. Versionsverlauf
+- **1.4.0**
+  - **Angebote direkt im Projekt erstellen & an Lexoffice senden (Schema 18):**
+    - Im Projekt-Vorgang (`/projekte`, Block **„Angebot“**) gibt es jetzt oben rechts den Button **„+ Neues Angebot“** (analog zu „+ Neue Bestellung“).
+    - Neue Angebotsmaske (`/angebote/neu`, `/angebote/<id>/bearbeiten`) mit Projekt- und Kundenvorauswahl, Datum, Gültig bis, MwSt. %, Titel, Einleitung/Schlusstext und kompakter Positionstabelle (`+ Zeile hinzufügen`) mit Live-Netto-/MwSt.-/Brutto-Berechnung und Kostenart (Material/Arbeit/Pauschale/Fremdleistung für das Projekt-Materialbudget).
+    - **Zweistufiger Ablauf (Lokal → Lexoffice → Rechnung):**
+      - Angebote können zuerst als **lokaler Entwurf in BeLiKo** gespeichert, jederzeit bearbeitet oder gelöscht werden.
+      - Per Klick auf **„📤 An Lexoffice senden“** (direkt beim Speichern oder später in der Angebotsansicht `/lexoffice/belege/<id>`) wird das Angebot über die offizielle Lexoffice-API (`POST /v1/quotations`) als Entwurf an Lexoffice übertragen (inkl. direkter Kundenverknüpfung über `contactId`, falls der Kontakt aus Lexoffice stammt).
+      - In Lexoffice kann der Entwurf geprüft, an den Kunden versendet und mit einem Klick in eine **Rechnung** weitergeführt werden; BeLiKo verknüpft den Beleg dauerhaft über die zurückgelieferte `lexoffice_id`.
+    - **Schema 18:** Ergänzt die Spalten `gueltig_bis`, `einleitung`, `schlusstext` und `mwst_satz` an `lex_documents`.
 - **1.3.4**
   - **Live-Ladebalken-Fenster für den Datanorm-Import (`/artikel/import`):**
     - Beim Klick auf **„Importieren“** öffnet sich ab sofort ein übersichtliches Fortschritts-Fenster (Modal) mit zwei getrennten Live-Ladebalken und Laufzeitanzeige:

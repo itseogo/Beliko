@@ -7,7 +7,7 @@ import json
 import time
 import urllib.error
 import urllib.request
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 
@@ -63,6 +63,136 @@ def anfrage(basis, schluessel, pfad, params=None, timeout=20):
         except OSError as e:
             raise LexFehler(f"Keine Verbindung zu Lexoffice: {e}")
     raise LexFehler(_fehlertext(429), status_code=429)
+
+
+def anfrage_post(basis, schluessel, pfad, payload, params=None, timeout=20):
+    """Sendet eine JSON-POST-Anfrage an die Lexoffice Public API (z. B. Angebot als Entwurf anlegen)."""
+    url = (basis or BASIS).rstrip("/") + "/v1" + pfad + ("?" + urlencode(params) if params else "")
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {schluessel}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "BeLiKo",
+        },
+    )
+    for versuch in range(4):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                raw = r.read().decode("utf-8")
+                return json.loads(raw) if raw.strip() else {}
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and versuch < 3:
+                _schlafen(1.2 * (versuch + 1))
+                continue
+            err_body = None
+            try:
+                raw = e.read().decode("utf-8", errors="replace")
+                parsed = json.loads(raw)
+                err_body = parsed.get("message") or parsed.get("error") or raw
+                details = parsed.get("details")
+                if isinstance(details, list) and details:
+                    err_body = f"{err_body}: " + "; ".join(
+                        f"{d.get('field', '')} {d.get('message', '')}".strip()
+                        for d in details[:4] if isinstance(d, dict)
+                    )
+            except Exception:
+                pass
+            raise LexFehler(_fehlertext(e.code, err_body), status_code=e.code, antwort_daten=err_body)
+        except ValueError:
+            raise LexFehler("Unerwartete Antwort von Lexoffice (kein JSON). Stimmt die API-Adresse?")
+        except OSError as e:
+            raise LexFehler(f"Keine Verbindung zu Lexoffice: {e}")
+    raise LexFehler(_fehlertext(429), status_code=429)
+
+
+def angebot_erstellen(basis, schluessel, doc, contact=None):
+    """Überträgt ein in BeLiKo erstelltes Angebot als Entwurf an Lexoffice (/v1/quotations).
+
+    In Lexoffice kann der Entwurf anschließend geprüft, versendet und direkt in eine Rechnung weitergeführt werden.
+    """
+    if not doc.items:
+        raise LexFehler("Das Angebot enthält keine Positionen.")
+
+    datum = doc.datum or date.today()
+    gueltig = doc.gueltig_bis or (datum + timedelta(days=30))
+    if gueltig < datum:
+        gueltig = datum + timedelta(days=30)
+
+    if contact is not None and contact.lexoffice_id:
+        adresse = {"contactId": contact.lexoffice_id}
+    else:
+        name = (contact.anzeigename if contact is not None else None) or (doc.kunde_name or "").strip()
+        if not name:
+            raise LexFehler("Bitte erst einen Kunden am Angebot angeben, bevor es nach Lexoffice gesendet wird.")
+        adresse = {"name": name[:200], "countryCode": (contact.re_land if contact and contact.re_land else "DE")}
+        if contact is not None:
+            if contact.re_zusatz:
+                adresse["supplement"] = contact.re_zusatz[:200]
+            if contact.re_strasse:
+                adresse["street"] = contact.re_strasse[:200]
+            if contact.re_plz:
+                adresse["zip"] = contact.re_plz[:20]
+            if contact.re_ort:
+                adresse["city"] = contact.re_ort[:100]
+
+    waehrung = doc.waehrung or "EUR"
+    mwst = float(doc.mwst_satz if doc.mwst_satz is not None else Decimal("19"))
+    line_items = []
+    for item in doc.items:
+        if item.lex_typ == "text":
+            line_items.append({
+                "type": "text",
+                "name": (item.bezeichnung or "Hinweis")[:255],
+                "description": item.beschreibung or "",
+            })
+        else:
+            pos_dict = {
+                "type": "custom",
+                "name": (item.bezeichnung or "Position")[:255],
+                "description": item.beschreibung or "",
+                "quantity": float(item.menge if item.menge is not None else Decimal("1")),
+                "unitName": (item.einheit or "Stück")[:50],
+                "unitPrice": {
+                    "currency": waehrung,
+                    "netAmount": float(item.einzelpreis_netto if item.einzelpreis_netto is not None else Decimal("0")),
+                    "taxRatePercentage": mwst,
+                },
+            }
+            if item.rabatt_prozent:
+                pos_dict["discountPercentage"] = float(item.rabatt_prozent)
+            line_items.append(pos_dict)
+
+    payload = {
+        "voucherDate": f"{datum.isoformat()}T00:00:00.000+01:00",
+        "expirationDate": f"{gueltig.isoformat()}T00:00:00.000+01:00",
+        "address": adresse,
+        "lineItems": line_items,
+        "totalPrice": {"currency": waehrung},
+        "taxConditions": {"taxType": "net"},
+        "title": (doc.titel or "Angebot")[:255],
+    }
+    if doc.einleitung:
+        payload["introduction"] = doc.einleitung
+    if doc.schlusstext:
+        payload["remark"] = doc.schlusstext
+
+    resp = anfrage_post(basis, schluessel, "/quotations", payload)
+    lex_id = resp.get("id")
+    if not lex_id:
+        raise LexFehler("Lexoffice hat keine Beleg-ID für das neue Angebot zurückgeliefert.")
+
+    detail = None
+    try:
+        _schlafen(PAUSE)
+        detail = beleg_detail(basis, schluessel, "quotation", lex_id)
+    except Exception:
+        detail = None
+    return resp, detail
 
 
 def profil(basis, schluessel):

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from . import config
 from .models import Base, Meta, NumberRange, Order
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 
 def _spalten_ergaenzen(engine, tabelle, spalten):
@@ -103,6 +103,13 @@ def migrate(engine):
         })
     if aktuell < 15:
         _spalten_ergaenzen(engine, "articles", {"hersteller": "VARCHAR(100)"})
+    if aktuell < 18:
+        _spalten_ergaenzen(engine, "lex_documents", {
+            "gueltig_bis": "DATE",
+            "einleitung": "TEXT",
+            "schlusstext": "TEXT",
+            "mwst_satz": "DECIMAL(5,2)",
+        })
     if aktuell < 17:
         _spalten_ergaenzen(engine, "articles", {"ekpreis": "DECIMAL(12,4)"})
     if aktuell < 16:

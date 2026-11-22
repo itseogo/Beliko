@@ -368,6 +368,10 @@ class LexDocument(Base):
     archiviert: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at_lex: Mapped[str | None] = mapped_column(String(40))
     letzter_sync: Mapped[datetime | None] = mapped_column(DateTime)
+    gueltig_bis: Mapped[date | None] = mapped_column(Date)
+    einleitung: Mapped[str | None] = mapped_column(Text)
+    schlusstext: Mapped[str | None] = mapped_column(Text)
+    mwst_satz: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), default=Decimal("19.00"))
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"))
     version: Mapped[int] = mapped_column(Integer, default=1)
 
@@ -377,6 +381,10 @@ class LexDocument(Base):
         back_populates="document", order_by="LexDocumentItem.position, LexDocumentItem.id",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def ist_lokal(self) -> bool:
+        return bool(self.lexoffice_id and self.lexoffice_id.startswith("lokal-"))
 
     @property
     def materialwert(self):

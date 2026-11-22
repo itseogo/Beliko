@@ -6,7 +6,7 @@ from flask import Flask, g, redirect, render_template, request, session, url_for
 from . import config, db, formate, security
 from .models import User
 
-VERSION = "1.3.4"
+VERSION = "1.4.0"
 
 
 def create_app():
