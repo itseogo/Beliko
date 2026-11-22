@@ -288,6 +288,7 @@ Echte Dateien des Lieferanten nicht ins Paket legen; `tests/make_ugl.py` baut ei
       2. **2. Daten einlesen & speichern:** Startet den Import im Hintergrund (`POST /artikel/import/start`) und fragt den Live-Status über `GET /artikel/import/status/<job_id>` ab (Entpacken/Lesen → Datenbank vorbereiten → exakter Prozent- und Artikelzähler wie `125.000 / 691.023 verarbeitet`).
     - **Kein Browser-Timeout bei großen Dateien:** Durch den Hintergrund-Worker und gestaffelte Datenbank-Commits (alle 5.000 Artikel) laufen auch große Dateien (wie Rexel mit 691.000 Artikeln) stabil ohne Verbindungsabbruch durch.
     - Nach Abschluss erscheint direkt die Zusammenfassung im Fenster mit einem Button **„Zum Artikelstamm“**; bei Fehlern eine klare Fehlermeldung zum Schließen.
+  - **Artikelstamm aufgeräumt (`/artikel`):** Doppelte Kopf-Buttons („Materialübersicht“ / „Lieferanten-Vergleich“ und „Datanorm importieren“) oben entfernt, da alle drei Punkte bereits direkt links im Navigationsbaum bzw. in den Reitern erreichbar sind.
 - **1.3.3**
   - **„Mein Preis“ (Kunden-Netto-Einkaufspreis / Datanorm Preistyp 2) neben Listenpreis (Schema 17):**
     - **Ursache geklärt:** In der Preisdatei `datpreis.001` (Datanorm Satzart P) übermittelt Fega für jeden Artikel zwei Sätze: `Preistyp 1` = Listenpreis (z. B. `120444`: 12,90 €) und `Preistyp 2` = Eigener Netto-Einkaufspreis („Mein Preis“, z. B. `120444`: 2,81 €). Bisher speicherte BeLiKo nur den Listenpreis in `articles.listenpreis`; der eigene Einkaufspreis ging verloren.

@@ -5,16 +5,6 @@
     <h1>Datanorm / Artikelstamm ({{ gesamt }})</h1>
     <p class="meta">Eingelesenes Material aus Datanorm-Stamm- und Preispflegedateien inkl. 3-Spalten-Lieferantenvergleich über EAN.</p>
   </div>
-  <div class="actions">
-    {% if ansicht == 'vergleich' %}
-      <a class="btn sek" href="{{ url_for('main.artikel', ansicht='liste', q=suche) }}">📋 Materialübersicht</a>
-    {% else %}
-      <a class="btn sek" href="{{ url_for('main.artikel', ansicht='vergleich', q=suche) }}">⚖️ Lieferanten-Vergleich (3 Spalten)</a>
-    {% endif %}
-    {% if g.user.role != 'leser' %}
-      <a class="btn" href="{{ url_for('main.artikel_import') }}">Datanorm importieren</a>
-    {% endif %}
-  </div>
 </div>
 
 <nav class="tabs" aria-label="Artikelstamm-Ansichten">
