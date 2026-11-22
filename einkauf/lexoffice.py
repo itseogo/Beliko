@@ -126,7 +126,7 @@ def angebot_erstellen(basis, schluessel, doc, contact=None):
     if contact is not None and contact.lexoffice_id:
         adresse = {"contactId": contact.lexoffice_id}
     else:
-        name = (contact.anzeigename if contact is not None else None) or (doc.kunde_name or "").strip()
+        name = (contact.name if contact is not None else None) or (doc.kunde_name or "").strip()
         if not name:
             raise LexFehler("Bitte erst einen Kunden am Angebot angeben, bevor es nach Lexoffice gesendet wird.")
         adresse = {"name": name[:200], "countryCode": (contact.re_land if contact and contact.re_land else "DE")}

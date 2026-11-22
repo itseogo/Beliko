@@ -24,7 +24,7 @@
       <select name="project_id" id="sel-projekt">
         <option value="">– kein Projekt –</option>
         {% for pr in projekte %}
-        <option value="{{ pr.id }}" data-cid="{{ pr.contact_id or '' }}" data-kunde="{{ pr.contact.anzeigename if pr.contact else (pr.kunde or '') }}" data-name="{{ pr.name }}" {{ 'selected' if doc.project_id == pr.id }}>{{ pr.nummer }} · {{ pr.name }}{% if pr.kunde %} ({{ pr.kunde }}){% endif %}</option>
+        <option value="{{ pr.id }}" data-cid="{{ pr.contact_id or '' }}" data-kunde="{{ pr.contact.name if pr.contact else (pr.kunde or '') }}" data-name="{{ pr.name }}" {{ 'selected' if doc.project_id == pr.id }}>{{ pr.nummer }} · {{ pr.name }}{% if pr.kunde %} ({{ pr.kunde }}){% endif %}</option>
         {% endfor %}
       </select>
     </label>
@@ -32,7 +32,7 @@
       <select name="contact_id" id="sel-kontakt">
         <option value="">– kein Kontakt gewählt (Freitext nutzen) –</option>
         {% for k in kontakte %}
-        <option value="{{ k.id }}" data-name="{{ k.anzeigename }}" {{ 'selected' if doc.contact_id == k.id }}>{{ k.anzeigename }}{% if k.lexoffice_id %} ✓ Lexoffice{% endif %}</option>
+        <option value="{{ k.id }}" data-name="{{ k.name }}" {{ 'selected' if doc.contact_id == k.id }}>{{ k.name }}{% if k.ort %} ({{ k.ort }}){% endif %}{% if k.lexoffice_id %} ✓ Lexoffice{% endif %}</option>
         {% endfor %}
       </select>
     </label>

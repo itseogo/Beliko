@@ -2485,7 +2485,10 @@ def angebot_neu():
     pid_param = request.args.get("p", type=int)
     vorauswahl_p = g.db.get(Project, pid_param) if pid_param else None
     projekte_liste = g.db.query(Project).order_by(Project.nummer.desc()).all()
-    kontakte_liste = g.db.query(Contact).filter(Contact.archiviert.is_(False), Contact.ist_kunde.is_(True)).order_by(Contact.firma, Contact.nachname).all()
+    kontakte_liste = sorted(
+        g.db.query(Contact).filter(Contact.archiviert.is_(False), Contact.ist_kunde.is_(True)).all(),
+        key=lambda k: (k.name or "").lower(),
+    )
     lex_hat_key = bool(einstellungen.lesen(g.db, "lex_key_enc"))
 
     if request.method == "POST":
@@ -2495,7 +2498,7 @@ def angebot_neu():
         kontakt = g.db.get(Contact, cid) if cid else None
         kunde_name = (request.form.get("kunde_name") or "").strip()[:200]
         if kontakt and not kunde_name:
-            kunde_name = kontakt.anzeigename[:200]
+            kunde_name = kontakt.name[:200]
         datum_val = parse_date(request.form.get("datum")) or date.today()
         gueltig_val = parse_date(request.form.get("gueltig_bis")) or (datum_val + timedelta(days=30))
         mwst_val = dec(request.form.get("mwst_satz"))
@@ -2558,7 +2561,7 @@ def angebot_neu():
         mwst_satz=Decimal("19.00"),
         project_id=vorauswahl_p.id if vorauswahl_p else None,
         contact_id=vorauswahl_p.contact_id if vorauswahl_p else None,
-        kunde_name=(vorauswahl_p.contact.anzeigename if (vorauswahl_p and vorauswahl_p.contact) else (vorauswahl_p.kunde if vorauswahl_p else "")),
+        kunde_name=(vorauswahl_p.contact.name if (vorauswahl_p and vorauswahl_p.contact) else (vorauswahl_p.kunde if vorauswahl_p else "")),
         titel=(f"Angebot – {vorauswahl_p.name}" if vorauswahl_p else "Angebot"),
     )
     return render_template("angebot_form.html", doc=vor_doc, projekte=projekte_liste, kontakte=kontakte_liste,
@@ -2575,7 +2578,10 @@ def angebot_bearbeiten(did):
         return redirect(url_for("main.lex_beleg_detail", did=doc.id, von=von))
 
     projekte_liste = g.db.query(Project).order_by(Project.nummer.desc()).all()
-    kontakte_liste = g.db.query(Contact).filter(Contact.archiviert.is_(False), Contact.ist_kunde.is_(True)).order_by(Contact.firma, Contact.nachname).all()
+    kontakte_liste = sorted(
+        g.db.query(Contact).filter(Contact.archiviert.is_(False), Contact.ist_kunde.is_(True)).all(),
+        key=lambda k: (k.name or "").lower(),
+    )
     lex_hat_key = bool(einstellungen.lesen(g.db, "lex_key_enc"))
 
     if request.method == "POST":
@@ -2585,7 +2591,7 @@ def angebot_bearbeiten(did):
         kontakt = g.db.get(Contact, cid) if cid else None
         kunde_name = (request.form.get("kunde_name") or "").strip()[:200]
         if kontakt and not kunde_name:
-            kunde_name = kontakt.anzeigename[:200]
+            kunde_name = kontakt.name[:200]
         datum_val = parse_date(request.form.get("datum")) or doc.datum or date.today()
         gueltig_val = parse_date(request.form.get("gueltig_bis")) or (datum_val + timedelta(days=30))
         mwst_val = dec(request.form.get("mwst_satz"))

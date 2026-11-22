@@ -96,7 +96,9 @@ assert "+ Neues Angebot" in h_proj
 assert "/angebote/neu?p=1" in h_proj
 
 # 2. Lokales Angebot als Entwurf erstellen (2 Positionen)
-t = tok(G("/angebote/neu?p=1"))
+h_form = G("/angebote/neu?p=1")
+assert "Kunde Muster GmbH (Stuttgart) ✓ Lexoffice" in h_form
+t = tok(h_form)
 h_neu = c.post("/angebote/neu?p=1", data={
     "_csrf": t,
     "project_id": "1",
