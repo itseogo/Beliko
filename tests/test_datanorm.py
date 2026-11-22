@@ -319,4 +319,31 @@ html_vgl_artnr = get("/artikel?ansicht=vergleich&s1=1&s2=2&s3=3&q=120462").get_d
 assert "2641482" in html_vgl_artnr
 assert "0099112" in html_vgl_artnr
 
-print("DATANORM + PREISPFLEGE + KUPFER + ZIP + LOESCH + LOEFFELHARDT + 3-SPALTEN-VERGLEICH TESTS OK")
+# Schritt 9: Asynchroner Hintergrund-Import mit Live-Ladebalken (/artikel/import/start + /status/<job_id>)
+import time as _time
+t = tok(get("/artikel/import").get_data(as_text=True))
+resp_start = c.post("/artikel/import/start", data={
+    "_csrf": t,
+    "datei": (io.BytesIO(DN5_FEGA), "datanorm_async.001"),
+    "supplier_id": "1",
+    "modus": "auto",
+})
+assert resp_start.status_code == 200
+j_start = resp_start.get_json()
+assert j_start["ok"] is True and j_start["job_id"]
+job_id = j_start["job_id"]
+
+fertig_data = None
+for _ in range(50):
+    st = c.get(f"/artikel/import/status/{job_id}").get_json()
+    assert st["ok"] is True
+    if st["phase"] in ("fertig", "fehler"):
+        fertig_data = st
+        break
+    _time.sleep(0.05)
+
+assert fertig_data is not None and fertig_data["phase"] == "fertig", f"Unerwarteter Status: {fertig_data}"
+assert fertig_data["prozent"] == 100
+assert "Datanorm-Import fertig" in fertig_data["meldung"]
+
+print("DATANORM + PREISPFLEGE + KUPFER + ZIP + LOESCH + LOEFFELHARDT + 3-SPALTEN-VERGLEICH + ASYNC-IMPORT TESTS OK")

@@ -3,6 +3,7 @@ import io
 import re
 from datetime import datetime
 import secrets
+import threading
 import time
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
@@ -2745,6 +2746,168 @@ def artikel():
     )
 
 
+_IMPORT_JOBS = {}
+_IMPORT_LOCK = threading.Lock()
+
+
+def _import_job_aufraeumen():
+    jetzt = time.time()
+    veraltet = [
+        jid for jid, j in _IMPORT_JOBS.items()
+        if j.get("phase") in ("fertig", "fehler") and (jetzt - j.get("aktualisiert", 0)) > 3600
+    ]
+    for jid in veraltet:
+        _IMPORT_JOBS.pop(jid, None)
+
+
+def _import_job_setzen(job_id, **felder):
+    with _IMPORT_LOCK:
+        job = _IMPORT_JOBS.get(job_id)
+        if job is not None:
+            job.update(felder)
+            job["aktualisiert"] = time.time()
+
+
+def _datanorm_import_ausfuehren(db_session, daten, sid, modus, user_id=None, username="system", fortschritt=None):
+    """Führt den Datanorm-Import (Stamm, Preispflege, Löschpflege, Warengruppen) aus und gibt die Statusmeldung zurück."""
+    def melden(phase, aktuell=0, gesamt=0, text=""):
+        if fortschritt:
+            fortschritt(phase=phase, aktuell=aktuell, gesamt=gesamt, text=text)
+
+    melden("lesen", 0, 0, "Datanorm-Datei wird entpackt und ausgewertet …")
+    r = datanorm.lesen(daten, modus=modus)
+
+    melden("laden", 0, 0, "Bestehende Artikel des Lieferanten werden geladen …")
+    if sid:
+        bestehende = {a.artikelnr: a for a in db_session.query(Article).filter(Article.supplier_id == sid).all()}
+        if not bestehende and ((modus == "nur_preise") or (modus == "auto" and r.get("ist_reine_preisdatei"))):
+            bestehende = {a.artikelnr: a for a in db_session.query(Article).filter(Article.supplier_id.is_(None)).all()}
+    else:
+        bestehende = {a.artikelnr: a for a in db_session.query(Article).filter(Article.supplier_id.is_(None)).all()}
+
+    if r.get("ist_reine_loeschdatei"):
+        loesch_kand = [bestehende[artnr] for artnr in r.get("loeschungen", []) if artnr in bestehende]
+        gesamt = len(loesch_kand)
+        melden("speichern", 0, gesamt, f"Löschpflege: {gesamt} Artikel werden entfernt …")
+        for idx, a in enumerate(loesch_kand, 1):
+            db_session.delete(a)
+            if idx % 2000 == 0 or idx == gesamt:
+                melden("speichern", idx, gesamt, f"Löschpflege: {idx:,} / {gesamt:,} Artikel entfernt …".replace(",", "."))
+        db_session.add(AuditLog(user_id=user_id, username=username, aktion="import", obj_typ="artikel",
+                                details=f"Datanorm Löschpflege: {len(loesch_kand)} Artikel entfernt"))
+        db_session.commit()
+        artikel_anzahl_cache_leeren()
+        return f"Datanorm-Löschpflege fertig: {len(loesch_kand)} Artikel aus dem Stamm gelöscht ({len(r.get('loeschungen', []))} in Datei gemeldet)."
+
+    if r.get("ist_reine_warengruppendatei"):
+        return f"Datanorm-Warengruppen: {len(r.get('warengruppen', {}))} Warengruppen in der Datei gefunden."
+
+    ist_nur_preise = (modus == "nur_preise") or (modus == "auto" and r["ist_reine_preisdatei"])
+
+    if ist_nur_preise:
+        akt, uebersprungen = 0, 0
+        preis_quellen = r["preise"] if r["preise"] else {
+            d["artikelnr"]: d for d in r["artikel"]
+            if d.get("listenpreis") is not None or d.get("ekpreis") is not None
+        }
+        gesamt = len(preis_quellen)
+        melden("speichern", 0, gesamt, f"Preispflege: 0 / {gesamt:,} Preise werden aktualisiert …".replace(",", "."))
+        for idx, (artnr, pd) in enumerate(preis_quellen.items(), 1):
+            a = bestehende.get(artnr)
+            if a:
+                hatte_pe = bool(pd.get("preiseinheit"))
+                eff_pe = pd.get("preiseinheit") or a.preiseinheit or 1
+                if hatte_pe:
+                    a.preiseinheit = pd["preiseinheit"]
+
+                if pd.get("roher_listenpreis_eur") is not None:
+                    a.listenpreis = (pd["roher_listenpreis_eur"] / Decimal(eff_pe)).quantize(Decimal("0.0001"))
+                elif pd.get("listenpreis") is not None:
+                    a.listenpreis = (pd["listenpreis"] if hatte_pe else (pd["listenpreis"] / Decimal(eff_pe))).quantize(Decimal("0.0001"))
+
+                if pd.get("roher_ekpreis_eur") is not None:
+                    a.ekpreis = (pd["roher_ekpreis_eur"] / Decimal(eff_pe)).quantize(Decimal("0.0001"))
+                elif pd.get("ekpreis") is not None:
+                    a.ekpreis = (pd["ekpreis"] if hatte_pe else (pd["ekpreis"] / Decimal(eff_pe))).quantize(Decimal("0.0001"))
+
+                if a.listenpreis is None and a.ekpreis is not None:
+                    a.listenpreis = a.ekpreis
+                if sid:
+                    a.supplier_id = sid
+                a.updated_at = datetime.now()
+                akt += 1
+            else:
+                uebersprungen += 1
+            if idx % 5000 == 0:
+                db_session.commit()
+            if idx % 2000 == 0 or idx == gesamt:
+                melden("speichern", idx, gesamt, f"Preispflege: {idx:,} / {gesamt:,} geprüft ({akt:,} aktualisiert) …".replace(",", "."))
+        db_session.add(AuditLog(user_id=user_id, username=username, aktion="import", obj_typ="artikel",
+                                details=f"Datanorm Preispflege: {akt} Preise aktualisiert, {uebersprungen} übersprungen"))
+        db_session.commit()
+        artikel_anzahl_cache_leeren()
+        return (f"Datanorm-Preispflege fertig: {akt} Preise aktualisiert"
+                + (f" ({uebersprungen} Artikel nicht im Stamm übersprungen)" if uebersprungen else "") + ".")
+    else:
+        neu, akt = 0, 0
+        art_liste = r["artikel"]
+        gesamt = len(art_liste)
+        melden("speichern", 0, gesamt, f"Artikelstamm: 0 / {gesamt:,} Artikel werden eingelesen …".replace(",", "."))
+        for idx, d in enumerate(art_liste, 1):
+            a = bestehende.get(d["artikelnr"])
+            if a is None:
+                a = Article(artikelnr=d["artikelnr"], bezeichnung=d["bezeichnung"])
+                db_session.add(a)
+                bestehende[d["artikelnr"]] = a
+                neu += 1
+            else:
+                akt += 1
+            a.bezeichnung = d["bezeichnung"]
+            a.kurztext2 = d.get("kurztext2")
+            a.einheit = d.get("einheit")
+            a.listenpreis = d.get("listenpreis")
+            a.ekpreis = d.get("ekpreis")
+            a.preiseinheit = d.get("preiseinheit", 1)
+            a.rabattgruppe = d.get("rabattgruppe")
+            if d.get("kupferbasis") is not None:
+                a.kupferbasis = d["kupferbasis"]
+            if d.get("kupfergewicht") is not None:
+                a.kupfergewicht = d["kupfergewicht"]
+            if d.get("kupfermerker") is not None:
+                a.kupfermerker = d["kupfermerker"]
+            if d.get("ean"):
+                a.ean = d["ean"]
+            if d.get("matchcode"):
+                a.matchcode = d["matchcode"]
+            if d.get("hersteller"):
+                a.hersteller = d["hersteller"]
+            if d.get("hersteller_artnr"):
+                a.hersteller_artnr = d["hersteller_artnr"]
+            if sid:
+                a.supplier_id = sid
+            a.updated_at = datetime.now()
+            if idx % 5000 == 0:
+                db_session.commit()
+            if idx % 2000 == 0 or idx == gesamt:
+                melden("speichern", idx, gesamt, f"Artikelstamm: {idx:,} / {gesamt:,} verarbeitet ({neu:,} neu, {akt:,} aktualisiert) …".replace(",", "."))
+
+        geloescht = 0
+        if r.get("loeschungen"):
+            for artnr in r["loeschungen"]:
+                a = bestehende.get(artnr)
+                if a:
+                    db_session.delete(a)
+                    bestehende.pop(artnr, None)
+                    geloescht += 1
+
+        db_session.add(AuditLog(user_id=user_id, username=username, aktion="import", obj_typ="artikel",
+                                details=f"Datanorm: {neu} neu, {akt} aktualisiert" + (f", {geloescht} gelöscht" if geloescht else "")))
+        db_session.commit()
+        artikel_anzahl_cache_leeren()
+        return (f"Datanorm-Import fertig: {neu} neue Artikel, {akt} aktualisiert"
+                + (f", {geloescht} gelöschte Artikel bereinigt" if geloescht else "") + ".")
+
+
 @main.route("/artikel/import", methods=["GET", "POST"])
 @edit_required
 def artikel_import():
@@ -2760,123 +2923,96 @@ def artikel_import():
             flash("Die Datei ist größer als 150 MB.", "fehler")
             return redirect(url_for("main.artikel_import"))
         try:
-            r = datanorm.lesen(daten, modus=modus)
+            u = getattr(g, "user", None)
+            meldung = _datanorm_import_ausfuehren(
+                g.db, daten, sid, modus,
+                user_id=u.id if u else None,
+                username=u.username if u else "system",
+            )
         except datanorm.DatanormFehler as e:
             flash(f"Datanorm-Datei nicht lesbar: {e}", "fehler")
             return redirect(url_for("main.artikel_import"))
-
-        if sid:
-            bestehende = {a.artikelnr: a for a in g.db.query(Article).filter(Article.supplier_id == sid).all()}
-            if not bestehende and ((modus == "nur_preise") or (modus == "auto" and r.get("ist_reine_preisdatei"))):
-                bestehende = {a.artikelnr: a for a in g.db.query(Article).filter(Article.supplier_id.is_(None)).all()}
-        else:
-            bestehende = {a.artikelnr: a for a in g.db.query(Article).filter(Article.supplier_id.is_(None)).all()}
-
-        if r.get("ist_reine_loeschdatei"):
-            loesch_kand = [bestehende[artnr] for artnr in r.get("loeschungen", []) if artnr in bestehende]
-            for a in loesch_kand:
-                g.db.delete(a)
-            if loesch_kand:
-                g.db.commit()
-                artikel_anzahl_cache_leeren()
-            protokoll("import", "artikel", details=f"Datanorm Löschpflege: {len(loesch_kand)} Artikel entfernt")
-            flash(f"Datanorm-Löschpflege fertig: {len(loesch_kand)} Artikel aus dem Stamm gelöscht ({len(r.get('loeschungen', []))} in Datei gemeldet).", "ok")
-            return redirect(url_for("main.artikel"))
-
-        if r.get("ist_reine_warengruppendatei"):
-            flash(f"Datanorm-Warengruppen: {len(r.get('warengruppen', {}))} Warengruppen in der Datei gefunden.", "ok")
-            return redirect(url_for("main.artikel"))
-
-        ist_nur_preise = (modus == "nur_preise") or (modus == "auto" and r["ist_reine_preisdatei"])
-
-        if ist_nur_preise:
-            # Reine Preispflege: Nur bestehende Artikel aktualisieren
-            akt, uebersprungen = 0, 0
-            preis_quellen = r["preise"] if r["preise"] else {d["artikelnr"]: d for d in r["artikel"] if d.get("listenpreis") is not None or d.get("ekpreis") is not None}
-            for artnr, pd in preis_quellen.items():
-                a = bestehende.get(artnr)
-                if a:
-                    eff_pe = pd.get("preiseinheit") or a.preiseinheit or 1
-                    if pd.get("preiseinheit"):
-                        a.preiseinheit = pd["preiseinheit"]
-
-                    if pd.get("roher_listenpreis_eur") is not None:
-                        a.listenpreis = (pd["roher_listenpreis_eur"] / Decimal(eff_pe)).quantize(Decimal("0.0001"))
-                    elif pd.get("listenpreis") is not None:
-                        a.listenpreis = (pd["listenpreis"] if pd.get("preiseinheit") else (pd["listenpreis"] / Decimal(eff_pe))).quantize(Decimal("0.0001"))
-
-                    if pd.get("roher_ekpreis_eur") is not None:
-                        a.ekpreis = (pd["roher_ekpreis_eur"] / Decimal(eff_pe)).quantize(Decimal("0.0001"))
-                    elif pd.get("ekpreis") is not None:
-                        a.ekpreis = (pd["ekpreis"] if pd.get("preiseinheit") else (pd["ekpreis"] / Decimal(eff_pe))).quantize(Decimal("0.0001"))
-
-                    if a.listenpreis is None and a.ekpreis is not None:
-                        a.listenpreis = a.ekpreis
-                    if sid:
-                        a.supplier_id = sid
-                    a.updated_at = datetime.now()
-                    akt += 1
-                else:
-                    uebersprungen += 1
-            protokoll("import", "artikel", details=f"Datanorm Preispflege: {akt} Preise aktualisiert, {uebersprungen} übersprungen")
-            g.db.commit()
-            artikel_anzahl_cache_leeren()
-            flash(f"Datanorm-Preispflege fertig: {akt} Preise aktualisiert"
-                  + (f" ({uebersprungen} Artikel nicht im Stamm übersprungen)" if uebersprungen else "") + ".", "ok")
-            return redirect(url_for("main.artikel"))
-        else:
-            # Vollständiger Artikelstamm: Neu anlegen & aktualisieren
-            neu, akt = 0, 0
-            for d in r["artikel"]:
-                a = bestehende.get(d["artikelnr"])
-                if a is None:
-                    a = Article(artikelnr=d["artikelnr"], bezeichnung=d["bezeichnung"])
-                    g.db.add(a)
-                    bestehende[d["artikelnr"]] = a
-                    neu += 1
-                else:
-                    akt += 1
-                a.bezeichnung = d["bezeichnung"]
-                a.kurztext2 = d.get("kurztext2")
-                a.einheit = d.get("einheit")
-                a.listenpreis = d.get("listenpreis")
-                a.ekpreis = d.get("ekpreis")
-                a.preiseinheit = d.get("preiseinheit", 1)
-                a.rabattgruppe = d.get("rabattgruppe")
-                if d.get("kupferbasis") is not None:
-                    a.kupferbasis = d["kupferbasis"]
-                if d.get("kupfergewicht") is not None:
-                    a.kupfergewicht = d["kupfergewicht"]
-                if d.get("kupfermerker") is not None:
-                    a.kupfermerker = d["kupfermerker"]
-                if d.get("ean"):
-                    a.ean = d["ean"]
-                if d.get("matchcode"):
-                    a.matchcode = d["matchcode"]
-                if d.get("hersteller"):
-                    a.hersteller = d["hersteller"]
-                if d.get("hersteller_artnr"):
-                    a.hersteller_artnr = d["hersteller_artnr"]
-                if sid:
-                    a.supplier_id = sid
-                a.updated_at = datetime.now()
-            geloescht = 0
-            if r.get("loeschungen"):
-                for artnr in r["loeschungen"]:
-                    a = bestehende.get(artnr)
-                    if a:
-                        g.db.delete(a)
-                        bestehende.pop(artnr, None)
-                        geloescht += 1
-
-            protokoll("import", "artikel", details=f"Datanorm: {neu} neu, {akt} aktualisiert" + (f", {geloescht} gelöscht" if geloescht else ""))
-            g.db.commit()
-            artikel_anzahl_cache_leeren()
-            flash(f"Datanorm-Import fertig: {neu} neue Artikel, {akt} aktualisiert" + (f", {geloescht} gelöschte Artikel bereinigt" if geloescht else "") + ".", "ok")
-            return redirect(url_for("main.artikel"))
+        flash(meldung, "ok")
+        return redirect(url_for("main.artikel"))
 
     lieferanten = g.db.query(Supplier).filter(Supplier.active.is_(True)).order_by(Supplier.name).all()
     return render_template("artikel_import.html", lieferanten=lieferanten)
+
+
+@main.route("/artikel/import/start", methods=["POST"])
+@edit_required
+def artikel_import_start():
+    """Startet einen Datanorm-Import im Hintergrund und gibt eine Job-ID für den Live-Ladebalken zurück."""
+    f = request.files.get("datei")
+    sid = request.form.get("supplier_id", type=int)
+    modus = request.form.get("modus", "auto")
+    if not f or not f.filename:
+        return jsonify({"ok": False, "fehler": "Bitte eine Datanorm-Datei auswählen."}), 400
+    daten = f.read(150 * 1024 * 1024 + 1)
+    if len(daten) > 150 * 1024 * 1024:
+        return jsonify({"ok": False, "fehler": "Die Datei ist größer als 150 MB."}), 400
+
+    job_id = secrets.token_hex(12)
+    u = getattr(g, "user", None)
+    user_id = u.id if u else None
+    username = u.username if u else "system"
+    SessionLocal = current_app.extensions["SessionLocal"]
+
+    with _IMPORT_LOCK:
+        _import_job_aufraeumen()
+        _IMPORT_JOBS[job_id] = {
+            "user_id": user_id,
+            "phase": "lesen",
+            "aktuell": 0,
+            "gesamt": 0,
+            "prozent": 0,
+            "text": "Datei empfangen – wird ausgewertet …",
+            "meldung": "",
+            "fehler": "",
+            "aktualisiert": time.time(),
+        }
+
+    def _worker():
+        def _cb(phase, aktuell=0, gesamt=0, text=""):
+            proz = int((aktuell / gesamt) * 100) if gesamt > 0 else 0
+            _import_job_setzen(job_id, phase=phase, aktuell=aktuell, gesamt=gesamt, prozent=proz, text=text)
+
+        try:
+            with SessionLocal() as db_s:
+                meldung = _datanorm_import_ausfuehren(
+                    db_s, daten, sid, modus,
+                    user_id=user_id, username=username, fortschritt=_cb,
+                )
+            _import_job_setzen(job_id, phase="fertig", prozent=100, text="Import abgeschlossen.", meldung=meldung)
+        except datanorm.DatanormFehler as e:
+            _import_job_setzen(job_id, phase="fehler", fehler=f"Datanorm-Datei nicht lesbar: {e}", text="Fehler beim Lesen.")
+        except Exception as e:
+            _import_job_setzen(job_id, phase="fehler", fehler=f"Import fehlgeschlagen: {e}", text="Fehler beim Speichern.")
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return jsonify({"ok": True, "job_id": job_id})
+
+
+@main.route("/artikel/import/status/<job_id>")
+@login_required
+def artikel_import_status(job_id):
+    """Liefert den aktuellen Fortschritt eines laufenden Datanorm-Imports als JSON."""
+    with _IMPORT_LOCK:
+        job = _IMPORT_JOBS.get(job_id)
+        if not job:
+            return jsonify({"ok": False, "fehler": "Import-Auftrag nicht gefunden."}), 404
+        if job.get("user_id") != g.user.id and g.user.role != "admin":
+            abort(403)
+        return jsonify({
+            "ok": True,
+            "phase": job["phase"],
+            "aktuell": job["aktuell"],
+            "gesamt": job["gesamt"],
+            "prozent": job["prozent"],
+            "text": job["text"],
+            "meldung": job["meldung"],
+            "fehler": job["fehler"],
+        })
 
 
 @main.route("/rechnungen", methods=["GET", "POST"])

@@ -1,13 +1,70 @@
 {% extends 'base.html' %}{% from '_m.html' import csrf with context %}{% block title %}Datanorm importieren{% endblock %}
 {% block content %}
+<style>
+  .imp-overlay {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65);
+    display: none; align-items: center; justify-content: center;
+    z-index: 9999; padding: 1rem;
+  }
+  .imp-overlay.offen { display: flex; }
+  .imp-box {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    width: 100%; max-width: 540px; padding: 1.5rem;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  }
+  .imp-kopf { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: 0.35rem; }
+  .imp-kopf h2 { margin: 0; font-size: 1.15rem; }
+  .imp-zeit { font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .imp-datei { font-size: 0.85rem; color: var(--muted); margin: 0 0 1.2rem 0; word-break: break-all; }
+  .imp-schritt { margin-bottom: 1.1rem; }
+  .imp-schritt-kopf { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 0.35rem; gap: 0.5rem; }
+  .imp-schritt-kopf b { font-weight: 600; }
+  .imp-schritt-kopf span { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.85rem; }
+  .imp-balken {
+    height: 12px; background: var(--bg); border: 1px solid var(--line);
+    border-radius: 999px; overflow: hidden; position: relative;
+  }
+  .imp-fuellung {
+    height: 100%; width: 0%; background: var(--blue);
+    transition: width 0.25s ease; border-radius: 999px;
+  }
+  .imp-fuellung.ok { background: var(--ok, #22c55e); }
+  .imp-fuellung.fehler { background: var(--err, #ef4444); }
+  .imp-fuellung.aktiv {
+    width: 100%;
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--blue),
+      var(--blue) 12px,
+      rgba(255, 255, 255, 0.22) 12px,
+      rgba(255, 255, 255, 0.22) 24px
+    );
+    background-size: 34px 34px;
+    animation: imp-streifen 0.8s linear infinite;
+  }
+  @keyframes imp-streifen {
+    from { background-position: 0 0; }
+    to { background-position: 34px 0; }
+  }
+  .imp-status { font-size: 0.86rem; color: var(--muted); margin-top: 0.45rem; min-height: 1.2em; }
+  .imp-ergebnis {
+    display: none; padding: 0.75rem 0.95rem; border-radius: 6px;
+    margin-top: 1rem; font-size: 0.9rem; line-height: 1.4;
+  }
+  .imp-ergebnis.ok { display: block; background: rgba(34, 197, 94, 0.14); border: 1px solid rgba(34, 197, 94, 0.45); color: var(--text); }
+  .imp-ergebnis.fehler { display: block; background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.45); color: var(--text); }
+  .imp-aktionen { display: none; justify-content: flex-end; gap: 0.6rem; margin-top: 1.2rem; }
+  .imp-aktionen.sichtbar { display: flex; }
+</style>
+
 <p class="krumen"><a href="{{ url_for('main.artikel') }}">← Zurück zum Artikelstamm</a></p>
-<form method="post" enctype="multipart/form-data" class="panel">
+<form id="datanorm-form" method="post" enctype="multipart/form-data" class="panel">
   <h1>Datanorm importieren</h1>
   <p class="meta">Liest Datanorm-Dateien und ZIP-Archive (Version 4 oder 5, Satzarten A, B, P, S, R) ein und aktualisiert den Artikelstamm des gewählten Lieferanten.</p>
   {{ csrf() }}
   <div class="grid2">
-    <label class="f"><span>Datanorm-Datei (.001, .zip, datpreis.001)</span><input type="file" name="datei" required></label>
-    <label class="f"><span>Lieferant</span><select name="supplier_id" {{ 'required' if lieferanten else '' }}>
+    <label class="f"><span>Datanorm-Datei (.001, .zip, datpreis.001)</span><input id="inp-datei" type="file" name="datei" required></label>
+    <label class="f"><span>Lieferant</span><select id="inp-lief" name="supplier_id" {{ 'required' if lieferanten else '' }}>
       <option value="">– bitte Lieferant wählen –</option>
       {% for l in lieferanten %}<option value="{{ l.id }}" {{ 'selected' if lieferanten|length == 1 else '' }}>{{ l.name }}</option>{% endfor %}
     </select><small>Jeder Lieferant führt seinen eigenen Artikelstamm (verhindert Überschneidungen bei gleichen Artikelnummern).</small></label>
@@ -38,6 +95,219 @@
       </label>
     </div>
   </div>
-  <div class="actions"><button class="btn">Importieren</button><a class="btn sek" href="{{ url_for('main.artikel') }}">Abbrechen</a></div>
+  <div class="actions"><button id="btn-import" class="btn">Importieren</button><a class="btn sek" href="{{ url_for('main.artikel') }}">Abbrechen</a></div>
 </form>
+
+<div id="imp-modal" class="imp-overlay" role="dialog" aria-modal="true" aria-labelledby="imp-titel">
+  <div class="imp-box">
+    <div class="imp-kopf">
+      <h2 id="imp-titel">Datanorm-Import läuft …</h2>
+      <span id="imp-zeit" class="imp-zeit">0:00</span>
+    </div>
+    <p id="imp-datei" class="imp-datei"></p>
+
+    <div class="imp-schritt">
+      <div class="imp-schritt-kopf">
+        <b>1. Datei hochladen</b>
+        <span id="imp-up-info">0 %</span>
+      </div>
+      <div class="imp-balken"><div id="imp-up-bar" class="imp-fuellung"></div></div>
+    </div>
+
+    <div class="imp-schritt">
+      <div class="imp-schritt-kopf">
+        <b>2. Daten einlesen &amp; speichern</b>
+        <span id="imp-db-info">Wartet auf Upload …</span>
+      </div>
+      <div class="imp-balken"><div id="imp-db-bar" class="imp-fuellung"></div></div>
+      <div id="imp-status" class="imp-status"></div>
+    </div>
+
+    <div id="imp-ergebnis" class="imp-ergebnis"></div>
+
+    <div id="imp-aktionen" class="imp-aktionen">
+      <button type="button" id="imp-schliessen" class="btn sek">Schließen</button>
+      <a id="imp-fertig-link" class="btn" href="{{ url_for('main.artikel') }}">Zum Artikelstamm</a>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var form = document.getElementById("datanorm-form");
+  var modal = document.getElementById("imp-modal");
+  var titel = document.getElementById("imp-titel");
+  var zeitEl = document.getElementById("imp-zeit");
+  var dateiEl = document.getElementById("imp-datei");
+  var upInfo = document.getElementById("imp-up-info");
+  var upBar = document.getElementById("imp-up-bar");
+  var dbInfo = document.getElementById("imp-db-info");
+  var dbBar = document.getElementById("imp-db-bar");
+  var statusEl = document.getElementById("imp-status");
+  var ergEl = document.getElementById("imp-ergebnis");
+  var aktionenEl = document.getElementById("imp-aktionen");
+  var btnSchliessen = document.getElementById("imp-schliessen");
+  var fertigLink = document.getElementById("imp-fertig-link");
+  var btnSubmit = document.getElementById("btn-import");
+
+  var timer = null;
+  var pollTimer = null;
+  var startZeit = 0;
+
+  function fmtMB(bytes) {
+    return (bytes / (1024 * 1024)).toFixed(1).replace(".", ",") + " MB";
+  }
+
+  function fmtZeit(sek) {
+    var m = Math.floor(sek / 60);
+    var s = sek % 60;
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  function stopTimers() {
+    if (timer) { clearInterval(timer); timer = null; }
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  }
+
+  function zeigeFehler(msg) {
+    stopTimers();
+    titel.textContent = "Import fehlgeschlagen";
+    dbBar.className = "imp-fuellung fehler";
+    dbBar.style.width = "100%";
+    dbInfo.textContent = "Fehler";
+    ergEl.className = "imp-ergebnis fehler";
+    ergEl.textContent = msg;
+    fertigLink.style.display = "none";
+    btnSchliessen.style.display = "inline-block";
+    aktionenEl.classList.add("sichtbar");
+    btnSubmit.disabled = false;
+  }
+
+  function zeigeErfolg(msg) {
+    stopTimers();
+    titel.textContent = "Import abgeschlossen";
+    dbBar.className = "imp-fuellung ok";
+    dbBar.style.width = "100%";
+    dbInfo.textContent = "100 %";
+    statusEl.textContent = "Alle Daten wurden erfolgreich übernommen.";
+    ergEl.className = "imp-ergebnis ok";
+    ergEl.textContent = msg;
+    fertigLink.style.display = "inline-block";
+    btnSchliessen.style.display = "inline-block";
+    aktionenEl.classList.add("sichtbar");
+    btnSubmit.disabled = false;
+  }
+
+  btnSchliessen.addEventListener("click", function () {
+    modal.classList.remove("offen");
+  });
+
+  function statusAbfragen(jobId) {
+    fetch("{{ url_for('main.artikel_import_status', job_id='__JOB__') }}".replace("__JOB__", encodeURIComponent(jobId)), {
+      credentials: "same-origin"
+    })
+      .then(function (resp) { return resp.json().then(function (d) { return { status: resp.status, data: d }; }); })
+      .then(function (res) {
+        if (!res.data || !res.data.ok) {
+          zeigeFehler((res.data && res.data.fehler) || "Status konnte nicht abgefragt werden.");
+          return;
+        }
+        var d = res.data;
+        statusEl.textContent = d.text || "";
+
+        if (d.phase === "lesen" || d.phase === "laden") {
+          dbBar.className = "imp-fuellung aktiv";
+          dbBar.style.width = "100%";
+          dbInfo.textContent = d.phase === "lesen" ? "Wird entpackt & gelesen …" : "Datenbank wird vorbereitet …";
+        } else if (d.phase === "speichern") {
+          dbBar.className = "imp-fuellung";
+          dbBar.style.width = Math.max(2, d.prozent || 0) + "%";
+          dbInfo.textContent = (d.prozent || 0) + " %";
+        } else if (d.phase === "fertig") {
+          zeigeErfolg(d.meldung || "Import erfolgreich abgeschlossen.");
+          return;
+        } else if (d.phase === "fehler") {
+          zeigeFehler(d.fehler || "Unbekannter Fehler beim Import.");
+          return;
+        }
+        pollTimer = setTimeout(function () { statusAbfragen(jobId); }, 600);
+      })
+      .catch(function () {
+        pollTimer = setTimeout(function () { statusAbfragen(jobId); }, 1500);
+      });
+  }
+
+  form.addEventListener("submit", function (e) {
+    var dateiInp = document.getElementById("inp-datei");
+    if (!dateiInp.files || !dateiInp.files.length) return;
+    e.preventDefault();
+
+    var datei = dateiInp.files[0];
+    var liefSel = document.getElementById("inp-lief");
+    var liefName = liefSel && liefSel.selectedIndex > 0 ? liefSel.options[liefSel.selectedIndex].text : "";
+
+    btnSubmit.disabled = true;
+    titel.textContent = "Datanorm-Import läuft …";
+    dateiEl.textContent = datei.name + " (" + fmtMB(datei.size) + ")" + (liefName ? " · " + liefName : "");
+    upBar.className = "imp-fuellung";
+    upBar.style.width = "0%";
+    upInfo.textContent = "0 %";
+    dbBar.className = "imp-fuellung";
+    dbBar.style.width = "0%";
+    dbInfo.textContent = "Wartet auf Upload …";
+    statusEl.textContent = "Datei wird an den Server übertragen …";
+    ergEl.className = "imp-ergebnis";
+    ergEl.textContent = "";
+    aktionenEl.classList.remove("sichtbar");
+    modal.classList.add("offen");
+
+    startZeit = Date.now();
+    zeitEl.textContent = "0:00";
+    stopTimers();
+    timer = setInterval(function () {
+      zeitEl.textContent = fmtZeit(Math.floor((Date.now() - startZeit) / 1000));
+    }, 1000);
+
+    var fd = new FormData(form);
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "{{ url_for('main.artikel_import_start') }}", true);
+
+    xhr.upload.onprogress = function (ev) {
+      if (ev.lengthComputable && ev.total > 0) {
+        var p = Math.min(100, Math.round((ev.loaded / ev.total) * 100));
+        upBar.style.width = p + "%";
+        upInfo.textContent = fmtMB(ev.loaded) + " / " + fmtMB(ev.total) + " · " + p + " %";
+        if (p >= 100) {
+          upBar.classList.add("ok");
+          dbBar.className = "imp-fuellung aktiv";
+          dbInfo.textContent = "Wird entpackt & gelesen …";
+          statusEl.textContent = "Upload abgeschlossen – Datei wird jetzt eingelesen …";
+        }
+      }
+    };
+
+    xhr.onload = function () {
+      upBar.style.width = "100%";
+      upBar.classList.add("ok");
+      upInfo.textContent = fmtMB(datei.size) + " · 100 %";
+      var data = null;
+      try { data = JSON.parse(xhr.responseText); } catch (err) {}
+      if (xhr.status >= 200 && xhr.status < 300 && data && data.ok && data.job_id) {
+        dbBar.className = "imp-fuellung aktiv";
+        dbInfo.textContent = "Wird entpackt & gelesen …";
+        statusEl.textContent = "Datei wird ausgewertet …";
+        statusAbfragen(data.job_id);
+      } else {
+        zeigeFehler((data && data.fehler) || "Upload fehlgeschlagen (HTTP " + xhr.status + ").");
+      }
+    };
+
+    xhr.onerror = function () {
+      zeigeFehler("Verbindung zum Server unterbrochen.");
+    };
+
+    xhr.send(fd);
+  });
+})();
+</script>
 {% endblock %}
